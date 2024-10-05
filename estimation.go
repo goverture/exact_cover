@@ -39,7 +39,7 @@ func EstimateDLXWithSecondary(matrix [][]int, secondaryColumns map[int]bool, num
 	return averageEstimate
 }
 
-func estimateRandomWalk(root *Column, depth int) float64 {
+func estimateRandomWalk(root *column, depth int) float64 {
 	if noPrimaryColumnsLeft(root) {
 		// Reached a solution
 		return 1.0
@@ -53,8 +53,8 @@ func estimateRandomWalk(root *Column, depth int) float64 {
 	}
 
 	// Collect the possible choices (rows)
-	var choices []*Node
-	for i := col.D; i != &col.Node; i = i.D {
+	var choices []*node
+	for i := col.D; i != &col.node; i = i.D {
 		choices = append(choices, i)
 	}
 	numChoices := len(choices)

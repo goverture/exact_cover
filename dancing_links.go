@@ -6,35 +6,35 @@ import (
 	"math"
 )
 
-// Node represents each '1' in the matrix
-type Node struct {
-	C          *Column // Column header
+// node represents each '1' in the matrix
+type node struct {
+	C          *column // Column header
 	RowID      int     // Identifier for the original row
-	L, R, U, D *Node   // Left, Right, Up, Down pointers
+	L, R, U, D *node   // Left, Right, Up, Down pointers
 }
 
 // Column represents the column headers
-type Column struct {
-	Node                 // Embedding Node
+type column struct {
+	node                 // Embedding node
 	S            int     // Size: number of 1s in the column
 	N            string  // Name of the column
 	IsPrimary    bool    // Indicates if the column is primary (true) or secondary (false)
-	PrimaryLeft  *Column // Left pointer in primary columns list
-	PrimaryRight *Column // Right pointer in primary columns list
+	PrimaryLeft  *column // Left pointer in primary columns list
+	PrimaryRight *column // Right pointer in primary columns list
 }
 
 type NodeVisitor func(depth int)
 
 // InitializeRoot creates and initializes the root header
-func InitializeRoot() *Column {
-	root := &Column{
+func InitializeRoot() *column {
+	root := &column{
 		N: "root",
 	}
-	// Initialize root's embedded Node pointers to point to itself
-	root.L = &root.Node
-	root.R = &root.Node
-	root.U = &root.Node
-	root.D = &root.Node
+	// Initialize root's embedded node pointers to point to itself
+	root.L = &root.node
+	root.R = &root.node
+	root.U = &root.node
+	root.D = &root.node
 	// Initialize root's primary columns pointers to point to itself
 	root.PrimaryLeft = root
 	root.PrimaryRight = root
@@ -43,19 +43,19 @@ func InitializeRoot() *Column {
 }
 
 // CreateColumns creates and links all column headers horizontally and maintains the primary columns list
-func CreateColumns(root *Column, columnNames []string, isPrimary []bool) []*Column {
-	var prevColumn *Column
-	columns := make([]*Column, 0, len(columnNames))
-	var prevPrimary *Column = root
+func CreateColumns(root *column, columnNames []string, isPrimary []bool) []*column {
+	var prevColumn *column
+	columns := make([]*column, 0, len(columnNames))
+	var prevPrimary *column = root
 
 	for idx, name := range columnNames {
-		col := &Column{
+		col := &column{
 			N:         name,
 			IsPrimary: isPrimary[idx],
 		}
-		// Initialize the column's embedded Node pointers to point to itself
-		col.U = &col.Node
-		col.D = &col.Node
+		// Initialize the column's embedded node pointers to point to itself
+		col.U = &col.node
+		col.D = &col.node
 		col.C = col
 		col.S = 0
 
@@ -63,12 +63,12 @@ func CreateColumns(root *Column, columnNames []string, isPrimary []bool) []*Colu
 
 		// Link horizontally to form the header list
 		if prevColumn != nil {
-			col.L = &prevColumn.Node
-			prevColumn.R = &col.Node
+			col.L = &prevColumn.node
+			prevColumn.R = &col.node
 		} else {
 			// First column, link to root
-			col.L = &root.Node
-			root.R = &col.Node
+			col.L = &root.node
+			root.R = &col.node
 		}
 
 		prevColumn = col
@@ -90,27 +90,27 @@ func CreateColumns(root *Column, columnNames []string, isPrimary []bool) []*Colu
 
 	// Complete the circular linkage by linking the last column back to root
 	if prevColumn != nil {
-		prevColumn.R = &root.Node
-		root.L = &prevColumn.Node
+		prevColumn.R = &root.node
+		root.L = &prevColumn.node
 	}
 
 	return columns
 }
 
 // AddNodes adds all nodes to the Dancing Links structure based on the matrix
-func AddNodes(matrix [][]int, columns []*Column) {
+func AddNodes(matrix [][]int, columns []*column) {
 	for rowIndex, row := range matrix {
-		var prevNode *Node
+		var prevNode *node
 		for j, val := range row {
 			if val == 1 {
 				col := columns[j]
-				node := &Node{
+				node := &node{
 					C:     col,
 					RowID: rowIndex, // Assign the row index here
 				}
 				// Insert into column (vertical linkage)
 				node.U = col.U
-				node.D = &col.Node
+				node.D = &col.node
 				col.U.D = node
 				col.U = node
 				col.S++
@@ -133,7 +133,7 @@ func AddNodes(matrix [][]int, columns []*Column) {
 }
 
 // BuildDLX constructs the Dancing Links structure from the exact cover matrix
-func BuildDLX(matrix [][]int, secondaryColumns map[int]bool) *Column {
+func BuildDLX(matrix [][]int, secondaryColumns map[int]bool) *column {
 	root := InitializeRoot()
 	if len(matrix) == 0 {
 		return root // Empty matrix, return root as is
@@ -154,7 +154,7 @@ func BuildDLX(matrix [][]int, secondaryColumns map[int]bool) *Column {
 }
 
 // Cover removes a column from the header list and primary columns list
-func Cover(col *Column) {
+func Cover(col *column) {
 	// If the column is primary, remove it from the primary columns list
 	if col.IsPrimary {
 		col.PrimaryRight.PrimaryLeft = col.PrimaryLeft
@@ -166,7 +166,7 @@ func Cover(col *Column) {
 	col.L.R = col.R
 
 	// Iterate through each node in the column
-	for i := col.D; i != &col.Node; i = i.D {
+	for i := col.D; i != &col.node; i = i.D {
 		// Remove the node's row from other columns
 		for j := i.R; j != i; j = j.R {
 			j.D.U = j.U
@@ -177,9 +177,9 @@ func Cover(col *Column) {
 }
 
 // Uncover restores a previously covered column and updates the primary columns list
-func Uncover(col *Column) {
+func Uncover(col *column) {
 	// Iterate through each node in the column in reverse
-	for i := col.U; i != &col.Node; i = i.U {
+	for i := col.U; i != &col.node; i = i.U {
 		// Restore the node's row to other columns
 		for j := i.L; j != i; j = j.L {
 			j.C.S++
@@ -189,8 +189,8 @@ func Uncover(col *Column) {
 	}
 
 	// Restore the column header to the header list
-	col.R.L = &col.Node
-	col.L.R = &col.Node
+	col.R.L = &col.node
+	col.L.R = &col.node
 
 	// If the column is primary, restore it to the primary columns list
 	if col.IsPrimary {
@@ -200,9 +200,9 @@ func Uncover(col *Column) {
 }
 
 // chooseColumn selects the primary column with the smallest size (fewest 1s)
-func chooseColumn(root *Column) *Column {
+func chooseColumn(root *column) *column {
 	minSize := math.MaxInt64
-	var chosen *Column
+	var chosen *column
 	for col := root.PrimaryRight; col != root; col = col.PrimaryRight {
 		if col.S < minSize {
 			minSize = col.S
@@ -216,17 +216,17 @@ func chooseColumn(root *Column) *Column {
 }
 
 // getRow extracts the RowID from a node
-func getRow(node *Node) int {
+func getRow(node *node) int {
 	return node.RowID
 }
 
 // noPrimaryColumnsLeft checks if there are any primary columns left
-func noPrimaryColumnsLeft(root *Column) bool {
+func noPrimaryColumnsLeft(root *column) bool {
 	return root.PrimaryRight == root
 }
 
 // search recursively finds all exact covers, with context for cancellation
-func search(ctx context.Context, root *Column, matrix [][]int, solution []*Node, solutions chan<- [][]int, depth int, visit NodeVisitor) {
+func search(ctx context.Context, root *column, matrix [][]int, solution []*node, solutions chan<- [][]int, depth int, visit NodeVisitor) {
 	// Check for context cancellation
 	select {
 	case <-ctx.Done():
@@ -265,7 +265,7 @@ func search(ctx context.Context, root *Column, matrix [][]int, solution []*Node,
 	Cover(col)
 
 	// Iterate through each row in the column
-	for i := col.D; i != &col.Node; i = i.D {
+	for i := col.D; i != &col.node; i = i.D {
 		// Check for context cancellation
 		select {
 		case <-ctx.Done():
@@ -320,7 +320,7 @@ func SolveDLXWithSecondary(ctx context.Context, matrix [][]int, secondaryColumns
 
 	go func() {
 		root := BuildDLX(matrix, secondaryColumns)
-		var solution []*Node
+		var solution []*node
 		search(ctx, root, matrix, solution, solutions, 0, visitor) // Start with depth 0
 		fmt.Printf("Total nodes visited: %d\n", *totalNodes)
 		close(solutions)
@@ -339,7 +339,7 @@ func SolveDLX(ctx context.Context, matrix [][]int) <-chan [][]int {
 			secondaryColumns[i] = false
 		}
 		root := BuildDLX(matrix, secondaryColumns)
-		var solution []*Node
+		var solution []*node
 		search(ctx, root, matrix, solution, solutions, 0, visitor) // Start with depth 0
 		fmt.Printf("Total nodes visited: %d\n", *totalNodes)
 		close(solutions)
