@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	goverture "github.com/MarhicJeromeGIT/goverture/couverture"
+	goverture "github.com/goverture/exact_cover"
 )
 
 // TestNQueensSolver tests the SolveDLX function with the 4-Queens problem.

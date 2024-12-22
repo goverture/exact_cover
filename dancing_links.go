@@ -333,6 +333,11 @@ func SolveDLX(ctx context.Context, matrix [][]int) <-chan [][]int {
 	solutions := make(chan [][]int)
 	visitor, totalNodes := createNodeCounter()
 
+	if len(matrix) == 0 {
+		close(solutions)
+		return solutions
+	}
+
 	go func() {
 		secondaryColumns := make(map[int]bool)
 		for i := 0; i < len(matrix[0]); i++ {

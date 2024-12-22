@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	goverture "github.com/MarhicJeromeGIT/goverture/couverture"
+	goverture "github.com/goverture/exact_cover"
 )
 
 // Helper function to compare two Sudoku grids for equality.

@@ -91,3 +91,29 @@ func TestSolveDLX(t *testing.T) {
 		}
 	}
 }
+
+func TestSolveDLX_WithEmptyMatrix(t *testing.T) {
+	matrix := [][]int{}
+
+	solutionsChan := SolveDLX(context.Background(), matrix)
+
+	// Collect all solutions into a slice
+	var solutions [][]int
+	for sol := range solutionsChan {
+		var solutionIndices []int
+		for _, row := range sol {
+			index, found := FindRowIndex(matrix, row)
+			if !found {
+				t.Errorf("Row %v not found in the matrix", row)
+				continue
+			}
+			solutionIndices = append(solutionIndices, index)
+		}
+		solutions = append(solutions, solutionIndices)
+	}
+
+	// Check if the number of solutions matches
+	if len(solutions) != 0 {
+		t.Errorf("Expected 0 solutions, got %d", len(solutions))
+	}
+}

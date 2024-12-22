@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	goverture "github.com/MarhicJeromeGIT/goverture/couverture"
+	goverture "github.com/goverture/exact_cover"
 )
 
 // Define the size of the Sudoku grid

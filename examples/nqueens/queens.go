@@ -10,7 +10,7 @@ import (
 	"runtime/pprof"
 	"time"
 
-	goverture "github.com/MarhicJeromeGIT/goverture/couverture"
+	goverture "github.com/goverture/exact_cover"
 )
 
 type Choice struct {
