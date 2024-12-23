@@ -16,12 +16,23 @@ func TestBuildDLX(t *testing.T) {
 		{0, 1, 0, 0, 0, 0, 1},
 	}
 
+	sparseMatrix := SparseMatrixFromArray(matrix)
+
+	for i, row := range matrix {
+		sparseMatrix[i] = make(SparseRow, 0)
+		for j, val := range row {
+			if val == 1 {
+				sparseMatrix[i][j] = 1
+			}
+		}
+	}
+
 	secondaryColumns := make(map[int]bool)
 	for i := 0; i < len(matrix[0]); i++ {
 		secondaryColumns[i] = false
 	}
 
-	res := BuildDLX(matrix, secondaryColumns)
+	res := BuildDLX(sparseMatrix, secondaryColumns)
 	_ = res
 	println("ok")
 }
@@ -37,14 +48,16 @@ func TestSolveDLX(t *testing.T) {
 		{1, 1, 1, 1, 1, 1, 1}, // Row 6
 	}
 
-	solutionsChan := SolveDLX(context.Background(), matrix)
+	sparseMatrix := SparseMatrixFromArray(matrix)
+
+	solutionsChan := SolveDLX(context.Background(), sparseMatrix)
 
 	// Collect all solutions into a slice
 	var solutions [][]int
 	for sol := range solutionsChan {
 		var solutionIndices []int
 		for _, row := range sol {
-			index, found := FindRowIndex(matrix, row)
+			index, found := FindRowIndex(sparseMatrix, row)
 			if !found {
 				t.Errorf("Row %v not found in the matrix", row)
 				continue
@@ -95,14 +108,16 @@ func TestSolveDLX(t *testing.T) {
 func TestSolveDLX_WithEmptyMatrix(t *testing.T) {
 	matrix := [][]int{}
 
-	solutionsChan := SolveDLX(context.Background(), matrix)
+	sparseMatrix := SparseMatrixFromArray(matrix)
+
+	solutionsChan := SolveDLX(context.Background(), sparseMatrix)
 
 	// Collect all solutions into a slice
 	var solutions [][]int
 	for sol := range solutionsChan {
 		var solutionIndices []int
 		for _, row := range sol {
-			index, found := FindRowIndex(matrix, row)
+			index, found := FindRowIndex(sparseMatrix, row)
 			if !found {
 				t.Errorf("Row %v not found in the matrix", row)
 				continue

@@ -15,7 +15,7 @@ func gridsEqual(a, b [Size][Size]int) bool {
 }
 
 // Helper function to reconstruct a Sudoku grid from a solution.
-func reconstructGrid(solution [][]int, choices [][]int, choiceToCell []Choice) ([Size][Size]int, error) {
+func reconstructGrid(solution goverture.SparseMatrix, choices goverture.SparseMatrix, choiceToCell []Choice) ([Size][Size]int, error) {
 	var solvedGrid [Size][Size]int
 	for _, row := range solution {
 		choiceIndex, found := goverture.FindRowIndex(choices, row)
@@ -100,11 +100,13 @@ func TestSudokuSolver(t *testing.T) {
 		}
 	}
 
+	sparseMatrix := goverture.SparseMatrixFromArray(choices)
+
 	// Run the solver
-	solutionsChan := goverture.SolveDLX(context.Background(), choices)
+	solutionsChan := goverture.SolveDLX(context.Background(), sparseMatrix)
 
 	// Collect all solutions into a slice
-	var solutions [][][]int
+	var solutions []goverture.SparseMatrix
 	for sol := range solutionsChan {
 		solutions = append(solutions, sol)
 	}
@@ -117,7 +119,7 @@ func TestSudokuSolver(t *testing.T) {
 	// Reconstruct each solution grid and compare with expected solutions
 	for _, sol := range solutions {
 		// Reconstruct the grid from the solution
-		reconstructedGrid, err := reconstructGrid(sol, choices, choiceToCell)
+		reconstructedGrid, err := reconstructGrid(sol, sparseMatrix, choiceToCell)
 		if err != nil {
 			t.Errorf("Error reconstructing grid: %v", err)
 			continue
@@ -141,7 +143,7 @@ func TestSudokuSolver(t *testing.T) {
 	for _, expected := range expectedSolutions {
 		found := false
 		for _, sol := range solutions {
-			reconstructedGrid, err := reconstructGrid(sol, choices, choiceToCell)
+			reconstructedGrid, err := reconstructGrid(sol, sparseMatrix, choiceToCell)
 			if err != nil {
 				continue
 			}

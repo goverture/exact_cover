@@ -23,11 +23,25 @@ func slicesEqual(a, b []int) bool {
 }
 
 // findRowIndex returns the index of the row in the matrix that matches the given row slice.
-func FindRowIndex(matrix [][]int, row []int) (int, bool) {
+func FindRowIndex(matrix SparseMatrix, row SparseRow) (int, bool) {
 	for i, mrow := range matrix {
 		if reflect.DeepEqual(mrow, row) {
 			return i, true
 		}
 	}
 	return -1, false
+}
+
+// Helper function to convert a 2D array of ints to a SparseMatrix
+func SparseMatrixFromArray(matrix [][]int) SparseMatrix {
+	sparseMatrix := make(SparseMatrix, len(matrix))
+	for i, row := range matrix {
+		sparseMatrix[i] = make(SparseRow, 0)
+		for j, val := range row {
+			if val == 1 {
+				sparseMatrix[i][j] = 1
+			}
+		}
+	}
+	return sparseMatrix
 }

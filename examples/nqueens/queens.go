@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"reflect"
 	"runtime/pprof"
 	"time"
 
@@ -49,16 +48,6 @@ func reconstructBoard(N int, solution []int, choices [][]int, choiceToCell []Cho
 		board[choice.Row][choice.Col] = 1 // Place a queen
 	}
 	return board, nil
-}
-
-// findRowIndex searches for a target row in the matrix and returns its index.
-func findRowIndex(matrix [][]int, targetRow []int) (int, bool) {
-	for i, row := range matrix {
-		if reflect.DeepEqual(row, targetRow) {
-			return i, true
-		}
-	}
-	return -1, false
 }
 
 func generateChoices(testN int) ([][]int, map[int]bool) {
@@ -117,11 +106,13 @@ func main() {
 	// Generate the exact cover matrix and choiceToCell mapping
 	choices, secondaryColumns := generateChoices(*size)
 
+	sparseMatrix := goverture.SparseMatrixFromArray(choices)
+
 	// Start timer
 	start := time.Now()
 
 	// Call SolveDLX with the exact cover matrix
-	solutionsChan := goverture.SolveDLXWithSecondary(context.Background(), choices, secondaryColumns)
+	solutionsChan := goverture.SolveDLXWithSecondary(context.Background(), sparseMatrix, secondaryColumns)
 
 	// Collect all solutions into a slice
 	solCount := 0

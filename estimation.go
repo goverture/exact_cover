@@ -12,7 +12,9 @@ func EstimateDLX(matrix [][]int, numSamples int) float64 {
 		secondaryColumns[i] = false
 	}
 
-	root := BuildDLX(matrix, secondaryColumns)
+	sparseMatrix := SparseMatrixFromArray(matrix)
+
+	root := BuildDLX(sparseMatrix, secondaryColumns)
 	rand.Seed(time.Now().UnixNano()) // Seed the random number generator
 
 	var totalEstimate float64 = 0
@@ -26,7 +28,9 @@ func EstimateDLX(matrix [][]int, numSamples int) float64 {
 }
 
 func EstimateDLXWithSecondary(matrix [][]int, secondaryColumns map[int]bool, numSamples int) float64 {
-	root := BuildDLX(matrix, secondaryColumns)
+	sparseMatrix := SparseMatrixFromArray(matrix)
+
+	root := BuildDLX(sparseMatrix, secondaryColumns)
 	rand.Seed(time.Now().UnixNano()) // Seed the random number generator
 
 	var totalEstimate float64 = 0

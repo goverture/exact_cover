@@ -97,10 +97,12 @@ func main() {
 		}
 	}
 
-	solutionsChan := goverture.SolveDLX(context.Background(), choices)
+	sparseMatrix := goverture.SparseMatrixFromArray(choices)
+
+	solutionsChan := goverture.SolveDLX(context.Background(), sparseMatrix)
 
 	// Collect all solutions into a slice
-	var solutions [][][]int
+	var solutions []goverture.SparseMatrix
 	for sol := range solutionsChan {
 		solutions = append(solutions, sol)
 	}
@@ -114,27 +116,27 @@ func main() {
 		fmt.Printf("Found %d solution(s)\n", len(solutions))
 	}
 
-	slicesEqual := func(a, b []int) bool {
-		if len(a) != len(b) {
-			return false
-		}
-		for i := range a {
-			if a[i] != b[i] {
-				return false
-			}
-		}
-		return true
-	}
+	// slicesEqual := func(a, b []int) bool {
+	// 	if len(a) != len(b) {
+	// 		return false
+	// 	}
+	// 	for i := range a {
+	// 		if a[i] != b[i] {
+	// 			return false
+	// 		}
+	// 	}
+	// 	return true
+	// }
 
 	// findRowIndex finds the index of a given row in the matrix.
-	findRowIndex := func(matrix [][]int, row []int) (int, bool) {
-		for i, r := range matrix {
-			if slicesEqual(r, row) {
-				return i, true
-			}
-		}
-		return -1, false
-	}
+	// findRowIndex := func(matrix [][]int, row []int) (int, bool) {
+	// 	for i, r := range matrix {
+	// 		if slicesEqual(r, row) {
+	// 			return i, true
+	// 		}
+	// 	}
+	// 	return -1, false
+	// }
 
 	// Process each solution to reconstruct and display the completed Sudoku grid
 	for idx, sol := range solutions {
@@ -151,7 +153,7 @@ func main() {
 		// Iterate over each row in the solution
 		for _, row := range sol {
 			// Find the index of this row in the exact cover matrix
-			choiceIndex, found := findRowIndex(choices, row)
+			choiceIndex, found := goverture.FindRowIndex(sparseMatrix, row)
 			if !found {
 				fmt.Printf("Row %v not found in the matrix\n", row)
 				continue
