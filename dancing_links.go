@@ -262,6 +262,10 @@ func search(
 	}
 
 	if noPrimaryColumnsLeft(root) {
+		if len(solution) == 0 {
+			return
+		}
+
 		// Found a solution
 		currentSolution := make(SparseMatrix, len(solution))
 		for i, nd := range solution {
@@ -367,38 +371,23 @@ func SolveDLXWithSecondary(ctx context.Context, matrix SparseMatrix, secondaryCo
 
 // SolveDLX initiates the DLX search and returns a channel of solutions (each a SparseMatrix).
 func SolveDLX(ctx context.Context, matrix SparseMatrix) <-chan SparseMatrix {
+	matrixChan := make(chan SparseRow)
+	go func() {
+		for _, row := range matrix {
+			matrixChan <- row
+		}
+		close(matrixChan)
+	}()
+
+	return SolveDLXWithChannel(ctx, matrixChan)
+}
+
+func SolveDLXWithChannel(ctx context.Context, matrixChan <-chan SparseRow) <-chan SparseMatrix {
 	solutions := make(chan SparseMatrix)
 	visitor, totalNodes := createNodeCounter()
 
-	if len(matrix) == 0 {
-		close(solutions)
-		return solutions
-	}
-
 	go func() {
-		// Mark all columns as primary by default
-		secondaryColumns := make(map[int]bool)
-		// We do not know the max col index until we scan the matrix, so let's do that
-		maxColIndex := 0
-		for _, row := range matrix {
-			for colIndex := range row {
-				if colIndex > maxColIndex {
-					maxColIndex = colIndex
-				}
-			}
-		}
-		for i := 0; i <= maxColIndex; i++ {
-			secondaryColumns[i] = false
-		}
-
-		matrixChan := make(chan SparseRow)
-		go func() {
-			for _, row := range matrix {
-				matrixChan <- row
-			}
-			close(matrixChan)
-		}()
-
+		secondaryColumns := make(map[int]bool) // it's empty
 		root := BuildDLXAsNeeded(matrixChan, secondaryColumns)
 		var solution []*node
 		search(ctx, root, solution, solutions, 0, visitor) // Start with depth 0
