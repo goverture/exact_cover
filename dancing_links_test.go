@@ -32,8 +32,17 @@ func TestBuildDLXAsNeeded(t *testing.T) {
 		secondaryColumns[i] = false
 	}
 
-	res := BuildDLXAsNeeded(sparseMatrix, secondaryColumns)
+	matrixChan := make(chan SparseRow)
+	go func() {
+		for _, row := range sparseMatrix {
+			matrixChan <- row
+		}
+		close(matrixChan)
+	}()
+
+	res := BuildDLXAsNeeded(matrixChan, secondaryColumns)
 	_ = res
+	// TODO: We need an actual assert here
 	println("ok")
 }
 

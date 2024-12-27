@@ -15,94 +15,94 @@ import (
 // canonicalSolution returns a slice of string-ified row-column lists.
 // Example: a solution with rows {0:1,5:1} and {1:1,7:1} becomes ["[0 5]", "[1 7]"] (and then sorted).
 func canonicalSolution(sol goverture.SparseMatrix) []string {
-    rows := make([]string, 0, len(sol))
-    for _, sparseRow := range sol {
-        // Collect column indices in sorted order
-        cols := make([]int, 0, len(sparseRow))
-        for c := range sparseRow {
-            cols = append(cols, c)
-        }
-        sort.Ints(cols)
-        // Turn the list of column indices into a string representation
-        rows = append(rows, fmt.Sprintf("%v", cols))
-    }
-    // Sort the row-representations so row order doesn't matter
-    sort.Strings(rows)
-    return rows
+	rows := make([]string, 0, len(sol))
+	for _, sparseRow := range sol {
+		// Collect column indices in sorted order
+		cols := make([]int, 0, len(sparseRow))
+		for c := range sparseRow {
+			cols = append(cols, c)
+		}
+		sort.Ints(cols)
+		// Turn the list of column indices into a string representation
+		rows = append(rows, fmt.Sprintf("%v", cols))
+	}
+	// Sort the row-representations so row order doesn't matter
+	sort.Strings(rows)
+	return rows
 }
 
 // canonicalSolutions turns a list of solutions into a list of canonical forms, then sorts it.
 func canonicalSolutions(solutions []goverture.SparseMatrix) [][]string {
-    canons := make([][]string, len(solutions))
-    for i, sol := range solutions {
-        canons[i] = canonicalSolution(sol)
-    }
-    // Sort the solutions themselves (outer slice) so solution order doesn't matter
-    sort.Slice(canons, func(i, j int) bool {
-        // Compare canons[i] vs canons[j] lexicographically
-        si, sj := canons[i], canons[j]
-        // Compare lengths first
-        if len(si) != len(sj) {
-            return len(si) < len(sj)
-        }
-        // Compare row-by-row
-        for idx := range si {
-            if si[idx] < sj[idx] {
-                return true
-            } else if si[idx] > sj[idx] {
-                return false
-            }
-        }
-        return false
-    })
-    return canons
+	canons := make([][]string, len(solutions))
+	for i, sol := range solutions {
+		canons[i] = canonicalSolution(sol)
+	}
+	// Sort the solutions themselves (outer slice) so solution order doesn't matter
+	sort.Slice(canons, func(i, j int) bool {
+		// Compare canons[i] vs canons[j] lexicographically
+		si, sj := canons[i], canons[j]
+		// Compare lengths first
+		if len(si) != len(sj) {
+			return len(si) < len(sj)
+		}
+		// Compare row-by-row
+		for idx := range si {
+			if si[idx] < sj[idx] {
+				return true
+			} else if si[idx] > sj[idx] {
+				return false
+			}
+		}
+		return false
+	})
+	return canons
 }
 
 func TestNQueensSolver_small(t *testing.T) {
-    // N=4 should have 2 solutions
-    testN := 4
-    expectedSolutionCount := 2
+	// N=4 should have 2 solutions
+	testN := 4
+	expectedSolutionCount := 2
 
-    // Your function that builds the matrix & secondary columns:
-    choices, secondaryColumns := generateChoices(testN)
-    sparseMatrix := goverture.SparseMatrixFromArray(choices)
+	// Your function that builds the matrix & secondary columns:
+	choices, secondaryColumns := generateChoices(testN)
+	sparseMatrix := goverture.SparseMatrixFromArray(choices)
 
-    // Solve with DLX
-    solutionsChan := goverture.SolveDLXWithSecondary(context.Background(), sparseMatrix, secondaryColumns)
+	// Solve with DLX
+	solutionsChan := goverture.SolveDLXWithSecondary(context.Background(), sparseMatrix, secondaryColumns)
 
-    // Collect solutions into a slice
-    var solutions []goverture.SparseMatrix
-    for sol := range solutionsChan {
-        solutions = append(solutions, sol)
-    }
+	// Collect solutions into a slice
+	var solutions []goverture.SparseMatrix
+	for sol := range solutionsChan {
+		solutions = append(solutions, sol)
+	}
 
-    // We *expect* two solutions, which we originally identified by row indices:
-    expectedSolutionsIndices := [][]int{
-        {1, 7, 8, 14},  // solution #1
-        {2, 4, 11, 13}, // solution #2
-    }
-    var expectedSolutions []goverture.SparseMatrix
-    for _, rowIndices := range expectedSolutionsIndices {
-        var sol goverture.SparseMatrix
-        for _, idx := range rowIndices {
-            sol = append(sol, sparseMatrix[idx])
-        }
-        expectedSolutions = append(expectedSolutions, sol)
-    }
+	// We *expect* two solutions, which we originally identified by row indices:
+	expectedSolutionsIndices := [][]int{
+		{1, 7, 8, 14},  // solution #1
+		{2, 4, 11, 13}, // solution #2
+	}
+	var expectedSolutions []goverture.SparseMatrix
+	for _, rowIndices := range expectedSolutionsIndices {
+		var sol goverture.SparseMatrix
+		for _, idx := range rowIndices {
+			sol = append(sol, sparseMatrix[idx])
+		}
+		expectedSolutions = append(expectedSolutions, sol)
+	}
 
-    // Quick sanity check: we expect 2 solutions
-    if len(solutions) != expectedSolutionCount {
-        t.Errorf("Expected %d solutions, got %d", expectedSolutionCount, len(solutions))
-    }
+	// Quick sanity check: we expect 2 solutions
+	if len(solutions) != expectedSolutionCount {
+		t.Errorf("Expected %d solutions, got %d", expectedSolutionCount, len(solutions))
+	}
 
-    // Convert both actual and expected solutions to canonical forms
-    gotCanon := canonicalSolutions(solutions)
-    expCanon := canonicalSolutions(expectedSolutions)
+	// Convert both actual and expected solutions to canonical forms
+	gotCanon := canonicalSolutions(solutions)
+	expCanon := canonicalSolutions(expectedSolutions)
 
-    // Compare them as sets (really, sorted slices of sorted rows)
-    if !reflect.DeepEqual(gotCanon, expCanon) {
-        t.Errorf("Solutions mismatch!\nGot: %#v\nExpected: %#v", gotCanon, expCanon)
-    }
+	// Compare them as sets (really, sorted slices of sorted rows)
+	if !reflect.DeepEqual(gotCanon, expCanon) {
+		t.Errorf("Solutions mismatch!\nGot: %#v\nExpected: %#v", gotCanon, expCanon)
+	}
 }
 
 // TestNQueensSolver_LargeN tests the N-Queens solver for multiple values of N, including large N.
