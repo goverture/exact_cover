@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sort"
 )
 
 // -- ADDED: Type definitions for SparseRow and SparseMatrix --
@@ -13,7 +14,6 @@ type SparseMatrix []SparseRow
 // node represents each '1' in the matrix
 type node struct {
 	C          *column // Column header
-	RowID      int     // Identifier for the original row
 	L, R, U, D *node   // Left, Right, Up, Down pointers
 }
 
@@ -25,6 +25,8 @@ type column struct {
 	IsPrimary    bool    // Indicates if the column is primary (true) or secondary (false)
 	PrimaryLeft  *column // Left pointer in primary columns list
 	PrimaryRight *column // Right pointer in primary columns list
+
+	Index int // In order to rebuild the original matrix row
 }
 
 // InitializeRoot creates and initializes the root header
@@ -44,127 +46,118 @@ func InitializeRoot() *column {
 	return root
 }
 
-// CreateColumns creates and links all column headers horizontally
-// and maintains the primary columns list
-func CreateColumns(root *column, columnNames []string, isPrimary []bool) []*column {
-	var prevColumn *column
-	columns := make([]*column, 0, len(columnNames))
-	var prevPrimary *column = root
+// BuildDLXAsNeeded constructs the Dancing Links structure from the sparse matrix
+// by creating columns lazily (on-demand) as rows are processed.
+func BuildDLXAsNeeded(matrix SparseMatrix, secondaryColumns map[int]bool) *column {
+    // 1) Create the root header
+    root := InitializeRoot()
 
-	for idx, name := range columnNames {
-		col := &column{
-			N:         name,
-			IsPrimary: isPrimary[idx],
-		}
-		// Initialize the column's embedded node pointers to point to itself
-		col.U = &col.node
-		col.D = &col.node
-		col.C = col
-		col.S = 0
+    // 2) Keep a map from colIndex -> *column
+    columnsMap := make(map[int]*column)
 
-		columns = append(columns, col)
+    // This helper ensures each column is created once and returns the *column.
+    getOrCreateColumn := func(colIndex int) *column {
+        if c, ok := columnsMap[colIndex]; ok {
+            return c
+        }
+        // Create a new column header
+        c := &column{
+            N:         fmt.Sprintf("C%d", colIndex+1),
+            IsPrimary: !secondaryColumns[colIndex], // false => secondary, true => primary
+            Index:     colIndex,
+        }
+        // Point its own Up/Down to itself (isolated vertical ring)
+        c.U = &c.node
+        c.D = &c.node
+        c.C = c
+        columnsMap[colIndex] = c
+        return c
+    }
 
-		// Link horizontally to form the header list
-		if prevColumn != nil {
-			col.L = &prevColumn.node
-			prevColumn.R = &col.node
-		} else {
-			// First column, link to root
-			col.L = &root.node
-			root.R = &col.node
-		}
+    // 3) Build all nodes while reading the rows
+    for _, sparseRow := range matrix {
+        var firstNodeInRow *node  // We'll link row nodes circularly
+        var lastNodeInRow *node
 
-		prevColumn = col
+        for colIndex, val := range sparseRow {
+            if val == 1 {
+                col := getOrCreateColumn(colIndex)
+                // Create the node
+                newNode := &node{C: col}
 
-		// Also link into the primary columns list if primary
-		if col.IsPrimary {
-			col.PrimaryLeft = prevPrimary
-			col.PrimaryRight = prevPrimary.PrimaryRight
-			prevPrimary.PrimaryRight.PrimaryLeft = col
-			prevPrimary.PrimaryRight = col
-			prevPrimary = col
-		} else {
-			col.PrimaryLeft = nil
-			col.PrimaryRight = nil
-		}
-	}
+                // -- Vertical insertion into the column --
+                // Link into the column ring (at the bottom)
+                newNode.U = col.U
+                newNode.D = &col.node
+                col.U.D = newNode
+                col.U = newNode
+                col.S++
 
-	// Complete the circular linkage by linking the last column back to root
-	if prevColumn != nil {
-		prevColumn.R = &root.node
-		root.L = &prevColumn.node
-	}
+                // -- Horizontal insertion in the row --
+                if firstNodeInRow == nil {
+                    // First node in this row
+                    firstNodeInRow = newNode
+                    lastNodeInRow = newNode
+                    // Row is circular, so point to itself
+                    newNode.L = newNode
+                    newNode.R = newNode
+                } else {
+                    // Insert to the right of lastNodeInRow
+                    newNode.L = lastNodeInRow
+                    newNode.R = lastNodeInRow.R
+                    lastNodeInRow.R.L = newNode
+                    lastNodeInRow.R = newNode
+                    lastNodeInRow = newNode
+                }
+            }
+        }
+    }
 
-	return columns
-}
+    // 4) Now link all columns to each other (and to the root) in sorted order of colIndex
+    //    This ensures a stable left-right traversal
+    type colWithIndex struct {
+        index  int
+        column *column
+    }
+    colList := make([]colWithIndex, 0, len(columnsMap))
+    for idx, c := range columnsMap {
+        colList = append(colList, colWithIndex{index: idx, column: c})
+    }
+    // Sort by column index ascending
+    sort.Slice(colList, func(i, j int) bool {
+        return colList[i].index < colList[j].index
+    })
 
-// AddNodes adds all nodes to the Dancing Links structure based on the sparse matrix
-func AddNodes(matrix SparseMatrix, columns []*column) {
-	for rowIndex, row := range matrix {
-		var prevNode *node
-		// row is a map[int]int, so colIndex -> val
-		for colIndex, val := range row {
-			if val == 1 {
-				col := columns[colIndex]
-				newNode := &node{
-					C:     col,
-					RowID: rowIndex, // store which original row this belongs to
-				}
-				// Insert into column (vertical linkage)
-				newNode.U = col.U
-				newNode.D = &col.node
-				col.U.D = newNode
-				col.U = newNode
-				col.S++
+    var prevCol *column = nil
+    for _, cwi := range colList {
+        col := cwi.column
+        if prevCol == nil {
+            // First actual column links to the root
+            col.L = &root.node
+            root.R = &col.node
+        } else {
+            col.L = &prevCol.node
+            prevCol.R = &col.node
+        }
+        prevCol = col
 
-				// Link horizontally in the row
-				if prevNode != nil {
-					newNode.L = prevNode
-					newNode.R = prevNode.R
-					prevNode.R.L = newNode
-					prevNode.R = newNode
-				} else {
-					// First node in the row points to itself
-					newNode.L = newNode
-					newNode.R = newNode
-				}
-				prevNode = newNode
-			}
-		}
-	}
-}
+        // Also link into the primary columns list if needed
+        if col.IsPrimary {
+            // Insert into the primary columns circular list to the right of `root`
+            col.PrimaryLeft = root
+            col.PrimaryRight = root.PrimaryRight
+            root.PrimaryRight.PrimaryLeft = col
+            root.PrimaryRight = col
+        }
+    }
 
-// BuildDLX constructs the Dancing Links structure from the sparse matrix.
-// `secondaryColumns` is a map of colIndex -> bool indicating if a column is secondary.
-func BuildDLX(matrix SparseMatrix, secondaryColumns map[int]bool) *column {
-	root := InitializeRoot()
-	if len(matrix) == 0 {
-		return root // Empty matrix, return root as is
-	}
+    // Complete circular linkage from last column back to root
+    if prevCol != nil {
+        prevCol.R = &root.node
+        root.L = &prevCol.node
+    }
 
-	// 1) Find the largest column index across all rows in the sparse matrix
-	maxColIndex := 0
-	for _, row := range matrix {
-		for colIndex := range row {
-			if colIndex > maxColIndex {
-				maxColIndex = colIndex
-			}
-		}
-	}
-	numCols := maxColIndex + 1
-
-	// 2) Generate column names and primary status
-	columnNames := make([]string, numCols)
-	isPrimary := make([]bool, numCols)
-	for i := 0; i < numCols; i++ {
-		columnNames[i] = fmt.Sprintf("C%d", i+1)
-		isPrimary[i] = !secondaryColumns[i] // false => secondary, true => primary
-	}
-
-	// 3) Create columns, then add nodes
-	columns := CreateColumns(root, columnNames, isPrimary)
-	AddNodes(matrix, columns)
-	return root
+    return root
 }
 
 // Cover removes a column from the header list and primary columns list
@@ -229,9 +222,18 @@ func chooseColumn(root *column) *column {
 	return chosen
 }
 
-// getRow extracts the RowID from a node
-func getRow(node *node) int {
-	return node.RowID
+func RebuildRowFromNode(n *node) SparseRow {
+	row := make(SparseRow)
+	current := n
+
+	for {
+		row[current.C.Index] = 1
+		current = current.R
+		if current == n {
+			break
+		}
+	}
+	return row
 }
 
 // noPrimaryColumnsLeft checks if there are any primary columns left
@@ -247,7 +249,6 @@ type NodeVisitor func(depth int)
 func search(
 	ctx context.Context,
 	root *column,
-	matrix SparseMatrix,
 	solution []*node,
 	solutions chan<- SparseMatrix, // channel of SparseMatrix
 	depth int,
@@ -264,8 +265,7 @@ func search(
 		// Found a solution
 		currentSolution := make(SparseMatrix, len(solution))
 		for i, nd := range solution {
-			rowID := getRow(nd)
-			currentSolution[i] = matrix[rowID]
+			currentSolution[i] = RebuildRowFromNode(nd)
 		}
 		// Attempt to send the solution, respecting context cancellation
 		select {
@@ -308,7 +308,7 @@ func search(
 		}
 
 		// Recurse with increased depth
-		search(ctx, root, matrix, solution, solutions, depth+1, visit)
+		search(ctx, root, solution, solutions, depth+1, visit)
 
 		// Backtrack: remove the row from the current solution
 		solution = solution[:len(solution)-1]
@@ -347,9 +347,10 @@ func SolveDLXWithSecondary(ctx context.Context, matrix SparseMatrix, secondaryCo
 	visitor, totalNodes := createNodeCounter()
 
 	go func() {
-		root := BuildDLX(matrix, secondaryColumns)
+		// root := BuildDLX(matrix, secondaryColumns)
+		root := BuildDLXAsNeeded(matrix, secondaryColumns)
 		var solution []*node
-		search(ctx, root, matrix, solution, solutions, 0, visitor) // Start with depth 0
+		search(ctx, root, solution, solutions, 0, visitor) // Start with depth 0
 		fmt.Printf("Total nodes visited: %d\n", *totalNodes)
 		close(solutions)
 	}()
@@ -382,9 +383,9 @@ func SolveDLX(ctx context.Context, matrix SparseMatrix) <-chan SparseMatrix {
 			secondaryColumns[i] = false
 		}
 
-		root := BuildDLX(matrix, secondaryColumns)
+		root := BuildDLXAsNeeded(matrix, secondaryColumns)
 		var solution []*node
-		search(ctx, root, matrix, solution, solutions, 0, visitor) // Start with depth 0
+		search(ctx, root, solution, solutions, 0, visitor) // Start with depth 0
 		fmt.Printf("Total nodes visited: %d\n", *totalNodes)
 		close(solutions)
 	}()

@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestBuildDLX(t *testing.T) {
+func TestBuildDLXAsNeeded(t *testing.T) {
 	// Example usage
 	matrix := [][]int{
 		{1, 0, 0, 1, 0, 0, 0},
@@ -32,7 +32,7 @@ func TestBuildDLX(t *testing.T) {
 		secondaryColumns[i] = false
 	}
 
-	res := BuildDLX(sparseMatrix, secondaryColumns)
+	res := BuildDLXAsNeeded(sparseMatrix, secondaryColumns)
 	_ = res
 	println("ok")
 }
