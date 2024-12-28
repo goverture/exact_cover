@@ -367,6 +367,7 @@ func SolveDLXWithChannelAndSecondary(ctx context.Context, matrixChan <-chan Spar
 		root := BuildDLXAsNeeded(matrixChan, secondaryColumns)
 		var solution []*node
 		search(ctx, root, solution, solutions, 0, visitor) // Start with depth 0
+		root = nil // Release the root
 		fmt.Printf("Total nodes visited: %d\n", *totalNodes)
 		close(solutions)
 	}()
