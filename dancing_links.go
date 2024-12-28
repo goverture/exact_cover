@@ -347,18 +347,22 @@ func createNodeCounter() (NodeVisitor, *int64) {
 // SolveDLXWithSecondary initiates the DLX search with secondary columns
 // and returns a channel of solutions (each a SparseMatrix).
 func SolveDLXWithSecondary(ctx context.Context, matrix SparseMatrix, secondaryColumns map[int]bool) <-chan SparseMatrix {
+	matrixChan := make(chan SparseRow)
+	go func() {
+		for _, row := range matrix {
+			matrixChan <- row
+		}
+		close(matrixChan)
+	}()
+
+	return SolveDLXWithChannelAndSecondary(ctx, matrixChan, secondaryColumns)
+}
+
+func SolveDLXWithChannelAndSecondary(ctx context.Context, matrixChan <-chan SparseRow, secondaryColumns map[int]bool) <-chan SparseMatrix {
 	solutions := make(chan SparseMatrix)
 	visitor, totalNodes := createNodeCounter()
 
 	go func() {
-		matrixChan := make(chan SparseRow)
-		go func() {
-			for _, row := range matrix {
-				matrixChan <- row
-			}
-			close(matrixChan)
-		}()
-
 		// root := BuildDLX(matrix, secondaryColumns)
 		root := BuildDLXAsNeeded(matrixChan, secondaryColumns)
 		var solution []*node
