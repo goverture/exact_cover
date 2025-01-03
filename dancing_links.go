@@ -367,7 +367,7 @@ func SolveDLXWithSecondary(
 	matrix SparseMatrix,
 	secondaryColumns map[int]bool,
 	tickerPeriod time.Duration,
-) <-chan SparseMatrix {
+) (<-chan SparseMatrix, <-chan SparseMatrix) {
 	matrixChan := make(chan SparseRow)
 	go func() {
 		for _, row := range matrix {
@@ -384,7 +384,7 @@ func SolveDLXWithChannelAndSecondary(
 	matrixChan <-chan SparseRow,
 	secondaryColumns map[int]bool,
 	tickerPeriod time.Duration,
-) <-chan SparseMatrix {
+) (<-chan SparseMatrix, <-chan SparseMatrix) {
 	solutions := make(chan SparseMatrix)
 	visitor, totalNodes := createNodeCounter()
 
@@ -403,7 +403,8 @@ func SolveDLXWithChannelAndSecondary(
 		fmt.Printf("Total nodes visited: %d\n", *totalNodes)
 		close(solutions)
 	}()
-	return solutions
+
+	return solutions, intermediarySolutions
 }
 
 // SolveDLX initiates the DLX search and returns a channel of solutions (each a SparseMatrix).
