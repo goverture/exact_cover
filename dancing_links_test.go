@@ -3,6 +3,7 @@ package goverture
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 func TestBuildDLXAsNeeded(t *testing.T) {
@@ -59,7 +60,7 @@ func TestSolveDLX(t *testing.T) {
 
 	sparseMatrix := SparseMatrixFromArray(matrix)
 
-	solutionsChan := SolveDLX(context.Background(), sparseMatrix)
+	solutionsChan, _ := SolveDLX(context.Background(), sparseMatrix, -1*time.Second)
 
 	// Collect all solutions into a slice
 	var solutions [][]int
@@ -119,7 +120,7 @@ func TestSolveDLX_WithEmptyMatrix(t *testing.T) {
 
 	sparseMatrix := SparseMatrixFromArray(matrix)
 
-	solutionsChan := SolveDLX(context.Background(), sparseMatrix)
+	solutionsChan, _ := SolveDLX(context.Background(), sparseMatrix, -1*time.Second)
 
 	// Collect all solutions into a slice
 	var solutions [][]int

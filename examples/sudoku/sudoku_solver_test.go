@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	goverture "github.com/goverture/exact_cover"
 )
@@ -103,7 +104,7 @@ func TestSudokuSolver(t *testing.T) {
 	sparseMatrix := goverture.SparseMatrixFromArray(choices)
 
 	// Run the solver
-	solutionsChan := goverture.SolveDLX(context.Background(), sparseMatrix)
+	solutionsChan, _ := goverture.SolveDLX(context.Background(), sparseMatrix, -1*time.Second)
 
 	// Collect all solutions into a slice
 	var solutions []goverture.SparseMatrix

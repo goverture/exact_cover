@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"time"
 
 	goverture "github.com/goverture/exact_cover"
 )
@@ -99,7 +100,7 @@ func main() {
 
 	sparseMatrix := goverture.SparseMatrixFromArray(choices)
 
-	solutionsChan := goverture.SolveDLX(context.Background(), sparseMatrix)
+	solutionsChan, _ := goverture.SolveDLX(context.Background(), sparseMatrix, -1*time.Second)
 
 	// Collect all solutions into a slice
 	var solutions []goverture.SparseMatrix

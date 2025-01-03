@@ -68,7 +68,7 @@ func TestNQueensSolver_small(t *testing.T) {
 	sparseMatrix := goverture.SparseMatrixFromArray(choices)
 
 	// Solve with DLX
-	solutionsChan := goverture.SolveDLXWithSecondary(context.Background(), sparseMatrix, secondaryColumns)
+	solutionsChan := goverture.SolveDLXWithSecondary(context.Background(), sparseMatrix, secondaryColumns, -1*time.Second)
 
 	// Collect solutions into a slice
 	var solutions []goverture.SparseMatrix
@@ -127,7 +127,7 @@ func TestNQueensSolver_LargeN(t *testing.T) {
 		sparseMatrix := goverture.SparseMatrixFromArray(choices)
 
 		// Call SolveDLXWithSecondary with the exact cover matrix
-		solutionsChan := goverture.SolveDLXWithSecondary(context.Background(), sparseMatrix, secondaryColumns)
+		solutionsChan := goverture.SolveDLXWithSecondary(context.Background(), sparseMatrix, secondaryColumns, -1*time.Second)
 
 		// Initialize a counter for solutions
 		var solCount uint64 = 0
@@ -190,7 +190,7 @@ func TestCancellation(t *testing.T) {
 	// Start the solver in a goroutine
 	sparseMatrix := goverture.SparseMatrixFromArray(choices)
 
-	solutionsChan := goverture.SolveDLXWithSecondary(ctx, sparseMatrix, secondaryColumns)
+	solutionsChan := goverture.SolveDLXWithSecondary(ctx, sparseMatrix, secondaryColumns, -1*time.Second)
 
 	// Initialize a counter for solutions
 	var solCount uint64 = 0
@@ -233,7 +233,7 @@ func TestTimeoutCancellation(t *testing.T) {
 	sparseMatrix := goverture.SparseMatrixFromArray(choices)
 
 	// Start the solver in a goroutine
-	solutionsChan := goverture.SolveDLXWithSecondary(ctx, sparseMatrix, secondaryColumns)
+	solutionsChan := goverture.SolveDLXWithSecondary(ctx, sparseMatrix, secondaryColumns, -1*time.Second)
 
 	// Initialize a counter for solutions
 	var solCount uint64 = 0

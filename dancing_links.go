@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"time"
 )
 
 // -- ADDED: Type definitions for SparseRow and SparseMatrix --
@@ -253,11 +254,26 @@ func search(
 	solutions chan<- SparseMatrix, // channel of SparseMatrix
 	depth int,
 	visit NodeVisitor,
+	ticker <-chan time.Time,
+	intermediarySolutions chan<- SparseMatrix,
 ) {
 	// Check for context cancellation
 	select {
 	case <-ctx.Done():
 		return
+	case <-ticker:
+		if len(solution) > 0 {
+			currentSolution := make(SparseMatrix, len(solution))
+			for i, nd := range solution {
+				currentSolution[i] = RebuildRowFromNode(nd)
+			}
+			// Attempt to send the solution, respecting context cancellation
+			select {
+			case intermediarySolutions <- currentSolution: // Note of fan of blocking, it forces us to read the intermediarySolutions channel
+			case <-ctx.Done():
+				return
+			}
+		}
 	default:
 	}
 
@@ -312,7 +328,7 @@ func search(
 		}
 
 		// Recurse with increased depth
-		search(ctx, root, solution, solutions, depth+1, visit)
+		search(ctx, root, solution, solutions, depth+1, visit, ticker, intermediarySolutions)
 
 		// Backtrack: remove the row from the current solution
 		solution = solution[:len(solution)-1]
@@ -346,7 +362,12 @@ func createNodeCounter() (NodeVisitor, *int64) {
 
 // SolveDLXWithSecondary initiates the DLX search with secondary columns
 // and returns a channel of solutions (each a SparseMatrix).
-func SolveDLXWithSecondary(ctx context.Context, matrix SparseMatrix, secondaryColumns map[int]bool) <-chan SparseMatrix {
+func SolveDLXWithSecondary(
+	ctx context.Context,
+	matrix SparseMatrix,
+	secondaryColumns map[int]bool,
+	tickerPeriod time.Duration,
+) <-chan SparseMatrix {
 	matrixChan := make(chan SparseRow)
 	go func() {
 		for _, row := range matrix {
@@ -355,19 +376,30 @@ func SolveDLXWithSecondary(ctx context.Context, matrix SparseMatrix, secondaryCo
 		close(matrixChan)
 	}()
 
-	return SolveDLXWithChannelAndSecondary(ctx, matrixChan, secondaryColumns)
+	return SolveDLXWithChannelAndSecondary(ctx, matrixChan, secondaryColumns, tickerPeriod)
 }
 
-func SolveDLXWithChannelAndSecondary(ctx context.Context, matrixChan <-chan SparseRow, secondaryColumns map[int]bool) <-chan SparseMatrix {
+func SolveDLXWithChannelAndSecondary(
+	ctx context.Context,
+	matrixChan <-chan SparseRow,
+	secondaryColumns map[int]bool,
+	tickerPeriod time.Duration,
+) <-chan SparseMatrix {
 	solutions := make(chan SparseMatrix)
 	visitor, totalNodes := createNodeCounter()
+
+	var ticker <-chan time.Time
+	if tickerPeriod > 0 {
+		ticker = time.NewTicker(tickerPeriod).C
+	}
+	intermediarySolutions := make(chan SparseMatrix, 1)
 
 	go func() {
 		// root := BuildDLX(matrix, secondaryColumns)
 		root := BuildDLXAsNeeded(matrixChan, secondaryColumns)
 		var solution []*node
-		search(ctx, root, solution, solutions, 0, visitor) // Start with depth 0
-		root = nil // Release the root
+		search(ctx, root, solution, solutions, 0, visitor, ticker, intermediarySolutions) // Start with depth 0
+		root = nil                                                                        // Release the root
 		fmt.Printf("Total nodes visited: %d\n", *totalNodes)
 		close(solutions)
 	}()
@@ -375,7 +407,11 @@ func SolveDLXWithChannelAndSecondary(ctx context.Context, matrixChan <-chan Spar
 }
 
 // SolveDLX initiates the DLX search and returns a channel of solutions (each a SparseMatrix).
-func SolveDLX(ctx context.Context, matrix SparseMatrix) <-chan SparseMatrix {
+func SolveDLX(
+	ctx context.Context,
+	matrix SparseMatrix,
+	tickerPeriod time.Duration,
+) (<-chan SparseMatrix, <-chan SparseMatrix) {
 	matrixChan := make(chan SparseRow)
 	go func() {
 		for _, row := range matrix {
@@ -384,20 +420,34 @@ func SolveDLX(ctx context.Context, matrix SparseMatrix) <-chan SparseMatrix {
 		close(matrixChan)
 	}()
 
-	return SolveDLXWithChannel(ctx, matrixChan)
+	return SolveDLXWithChannel(ctx, matrixChan, tickerPeriod)
 }
 
-func SolveDLXWithChannel(ctx context.Context, matrixChan <-chan SparseRow) <-chan SparseMatrix {
+func SolveDLXWithChannel(ctx context.Context, matrixChan <-chan SparseRow, tickerPeriod time.Duration) (<-chan SparseMatrix, <-chan SparseMatrix) {
 	solutions := make(chan SparseMatrix)
 	visitor, totalNodes := createNodeCounter()
+
+	var ticker <-chan time.Time
+	if tickerPeriod > 0 {
+		ticker = time.NewTicker(tickerPeriod).C
+	}
+	intermediarySolutions := make(chan SparseMatrix, 1)
 
 	go func() {
 		secondaryColumns := make(map[int]bool) // it's empty
 		root := BuildDLXAsNeeded(matrixChan, secondaryColumns)
 		var solution []*node
-		search(ctx, root, solution, solutions, 0, visitor) // Start with depth 0
+		search(ctx, root, solution, solutions, 0, visitor, ticker, intermediarySolutions) // Start with depth 0
 		fmt.Printf("Total nodes visited: %d\n", *totalNodes)
 		close(solutions)
+		close(intermediarySolutions)
 	}()
-	return solutions
+
+	go func() {
+		for sol := range intermediarySolutions {
+			fmt.Printf("Intermediate solution: %v\n", sol)
+		}
+	}()
+
+	return solutions, intermediarySolutions
 }
