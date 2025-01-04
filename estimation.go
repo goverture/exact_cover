@@ -22,7 +22,12 @@ func EstimateDLX(matrix [][]int, numSamples int) float64 {
 		close(matrixChan)
 	}()
 
-	root := BuildDLXAsNeeded(matrixChan, secondaryColumns)
+	isSecondaryColumn := func(colIndex int) bool {
+		ok, exists := secondaryColumns[colIndex]
+		return exists && ok
+	}
+
+	root := BuildDLXAsNeeded(matrixChan, isSecondaryColumn)
 	rand.Seed(time.Now().UnixNano()) // Seed the random number generator
 
 	var totalEstimate float64 = 0
@@ -46,7 +51,12 @@ func EstimateDLXWithSecondary(matrix [][]int, secondaryColumns map[int]bool, num
 		close(matrixChan)
 	}()
 
-	root := BuildDLXAsNeeded(matrixChan, secondaryColumns)
+	isSecondaryColumn := func(colIndex int) bool {
+		ok, exists := secondaryColumns[colIndex]
+		return exists && ok
+	}
+
+	root := BuildDLXAsNeeded(matrixChan, isSecondaryColumn)
 	rand.Seed(time.Now().UnixNano()) // Seed the random number generator
 
 	var totalEstimate float64 = 0

@@ -48,14 +48,14 @@ func InitializeRoot() *column {
 }
 
 // This helper ensures each column is created once and returns the *column.
-func getOrCreateColumn(colIndex int, columnsMap map[int]*column, secondaryColumns map[int]bool) *column {
+func getOrCreateColumn(colIndex int, columnsMap map[int]*column, isSecondaryColumn func(int) bool) *column {
 	if c, ok := columnsMap[colIndex]; ok {
 		return c
 	}
 	// Create a new column header
 	c := &column{
 		N:         fmt.Sprintf("C%d", colIndex+1),
-		IsPrimary: !secondaryColumns[colIndex], // false => secondary, true => primary
+		IsPrimary: !isSecondaryColumn(colIndex), // false => secondary, true => primary
 		Index:     colIndex,
 	}
 	// Point its own Up/Down to itself (isolated vertical ring)
@@ -68,7 +68,7 @@ func getOrCreateColumn(colIndex int, columnsMap map[int]*column, secondaryColumn
 
 // BuildDLXAsNeeded constructs the Dancing Links structure from the sparse matrix
 // by creating columns lazily (on-demand) as rows are processed.
-func BuildDLXAsNeeded(matrixChan <-chan SparseRow, secondaryColumns map[int]bool) *column {
+func BuildDLXAsNeeded(matrixChan <-chan SparseRow, isSecondaryColumn func(int) bool) *column {
 	// 1) Create the root header
 	root := InitializeRoot()
 
@@ -82,7 +82,7 @@ func BuildDLXAsNeeded(matrixChan <-chan SparseRow, secondaryColumns map[int]bool
 
 		for colIndex, val := range sparseRow {
 			if val == 1 {
-				col := getOrCreateColumn(colIndex, columnsMap, secondaryColumns)
+				col := getOrCreateColumn(colIndex, columnsMap, isSecondaryColumn)
 				// Create the node
 				newNode := &node{C: col}
 
@@ -394,9 +394,14 @@ func SolveDLXWithChannelAndSecondary(
 	}
 	intermediarySolutions := make(chan SparseMatrix, 1)
 
+	isSecondaryColumn := func(colIndex int) bool {
+		isSecondary, exists := secondaryColumns[colIndex]
+		return exists && isSecondary
+	}
+
 	go func() {
 		// root := BuildDLX(matrix, secondaryColumns)
-		root := BuildDLXAsNeeded(matrixChan, secondaryColumns)
+		root := BuildDLXAsNeeded(matrixChan, isSecondaryColumn)
 		var solution []*node
 		search(ctx, root, solution, solutions, 0, visitor, ticker, intermediarySolutions) // Start with depth 0
 		root = nil                                                                        // Release the root
@@ -434,9 +439,12 @@ func SolveDLXWithChannel(ctx context.Context, matrixChan <-chan SparseRow, ticke
 	}
 	intermediarySolutions := make(chan SparseMatrix, 1)
 
+	isSecondaryColumn := func(colIndex int) bool {
+		return false
+	}
+
 	go func() {
-		secondaryColumns := make(map[int]bool) // it's empty
-		root := BuildDLXAsNeeded(matrixChan, secondaryColumns)
+		root := BuildDLXAsNeeded(matrixChan, isSecondaryColumn)
 		var solution []*node
 		search(ctx, root, solution, solutions, 0, visitor, ticker, intermediarySolutions) // Start with depth 0
 		fmt.Printf("Total nodes visited: %d\n", *totalNodes)
