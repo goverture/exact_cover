@@ -41,7 +41,12 @@ func TestBuildDLXAsNeeded(t *testing.T) {
 		close(matrixChan)
 	}()
 
-	res := BuildDLXAsNeeded(matrixChan, secondaryColumns)
+	isSecondaryColumn := func(colIndex int) bool {
+		ok, exists := secondaryColumns[colIndex]
+		return exists && ok
+	}
+
+	res := BuildDLXAsNeeded(matrixChan, isSecondaryColumn)
 	_ = res
 	// TODO: We need an actual assert here
 	println("ok")

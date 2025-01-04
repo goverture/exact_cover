@@ -112,7 +112,12 @@ func main() {
 	start := time.Now()
 
 	// Call SolveDLX with the exact cover matrix
-	solutionsChan, _ := goverture.SolveDLXWithSecondary(context.Background(), sparseMatrix, secondaryColumns, -1*time.Second)
+	isSecondaryColumn := func(colIndex int) bool {
+		ok, exists := secondaryColumns[colIndex]
+		return exists && ok
+	}
+
+	solutionsChan, _ := goverture.SolveDLXWithSecondary(context.Background(), sparseMatrix, isSecondaryColumn, -1*time.Second)
 
 	// Collect all solutions into a slice
 	solCount := 0
