@@ -8,9 +8,15 @@ import (
 	"time"
 )
 
-// -- ADDED: Type definitions for SparseRow and SparseMatrix --
+// Type definitions for SparseRow, SparseMatrix, and Solution
 type SparseRow map[int]int
 type SparseMatrix []SparseRow
+
+// Solution represents a solution with a flag indicating if it's final.
+type Solution struct {
+	IsFinal bool
+	Matrix  SparseMatrix
+}
 
 // node represents each '1' in the matrix
 type node struct {
@@ -246,16 +252,15 @@ func noPrimaryColumnsLeft(root *column) bool {
 type NodeVisitor func(depth int)
 
 // search recursively finds all exact covers, with context for cancellation
-// NOTE: We'll now send out solutions as a channel of SparseMatrix
+// Sends solutions to a single channel with a flag indicating if it's final.
 func search(
 	ctx context.Context,
 	root *column,
 	solution []*node,
-	solutions chan<- SparseMatrix, // channel of SparseMatrix
+	solutions chan<- Solution,
 	depth int,
 	visit NodeVisitor,
 	ticker <-chan time.Time,
-	intermediarySolutions chan<- SparseMatrix,
 ) {
 	// Check for context cancellation
 	select {
@@ -267,9 +272,9 @@ func search(
 			for i, nd := range solution {
 				currentSolution[i] = RebuildRowFromNode(nd)
 			}
-			// Attempt to send the solution, respecting context cancellation
+			// Send intermediary solution
 			select {
-			case intermediarySolutions <- currentSolution: // Note of fan of blocking, it forces us to read the intermediarySolutions channel
+			case solutions <- Solution{IsFinal: false, Matrix: currentSolution}:
 			case <-ctx.Done():
 				return
 			}
@@ -282,14 +287,14 @@ func search(
 			return
 		}
 
-		// Found a solution
+		// Found a final solution
 		currentSolution := make(SparseMatrix, len(solution))
 		for i, nd := range solution {
 			currentSolution[i] = RebuildRowFromNode(nd)
 		}
-		// Attempt to send the solution, respecting context cancellation
+		// Send final solution
 		select {
-		case solutions <- currentSolution:
+		case solutions <- Solution{IsFinal: true, Matrix: currentSolution}:
 		case <-ctx.Done():
 			return
 		}
@@ -328,7 +333,7 @@ func search(
 		}
 
 		// Recurse with increased depth
-		search(ctx, root, solution, solutions, depth+1, visit, ticker, intermediarySolutions)
+		search(ctx, root, solution, solutions, depth+1, visit, ticker)
 
 		// Backtrack: remove the row from the current solution
 		solution = solution[:len(solution)-1]
@@ -361,13 +366,14 @@ func createNodeCounter() (NodeVisitor, *int64) {
 }
 
 // SolveDLXWithSecondary initiates the DLX search with secondary columns
-// and returns a channel of solutions (each a SparseMatrix).
+// and returns a channel of solutions.
 func SolveDLXWithSecondary(
 	ctx context.Context,
 	matrix SparseMatrix,
 	isSecondaryColumn func(int) bool,
 	tickerPeriod time.Duration,
-) (<-chan SparseMatrix, <-chan SparseMatrix) {
+) <-chan Solution {
+	solutions := make(chan Solution)
 	matrixChan := make(chan SparseRow)
 	go func() {
 		for _, row := range matrix {
@@ -376,43 +382,28 @@ func SolveDLXWithSecondary(
 		close(matrixChan)
 	}()
 
-	return SolveDLXWithChannelAndSecondary(ctx, matrixChan, isSecondaryColumn, tickerPeriod)
-}
-
-func SolveDLXWithChannelAndSecondary(
-	ctx context.Context,
-	matrixChan <-chan SparseRow,
-	isSecondaryColumn func(int) bool,
-	tickerPeriod time.Duration,
-) (<-chan SparseMatrix, <-chan SparseMatrix) {
-	solutions := make(chan SparseMatrix)
-	visitor, totalNodes := createNodeCounter()
-
-	var ticker <-chan time.Time
-	if tickerPeriod > 0 {
-		ticker = time.NewTicker(tickerPeriod).C
-	}
-	intermediarySolutions := make(chan SparseMatrix, 1)
-
 	go func() {
-		// root := BuildDLX(matrix, secondaryColumns)
 		root := BuildDLXAsNeeded(matrixChan, isSecondaryColumn)
-		var solution []*node
-		search(ctx, root, solution, solutions, 0, visitor, ticker, intermediarySolutions) // Start with depth 0
-		root = nil                                                                        // Release the root
+		visitor, totalNodes := createNodeCounter()
+		var ticker <-chan time.Time
+		if tickerPeriod > 0 {
+			ticker = time.NewTicker(tickerPeriod).C
+		}
+		search(ctx, root, nil, solutions, 0, visitor, ticker)
 		fmt.Printf("Total nodes visited: %d\n", *totalNodes)
 		close(solutions)
 	}()
 
-	return solutions, intermediarySolutions
+	return solutions
 }
 
-// SolveDLX initiates the DLX search and returns a channel of solutions (each a SparseMatrix).
+// SolveDLX initiates the DLX search and returns a channel of solutions.
 func SolveDLX(
 	ctx context.Context,
 	matrix SparseMatrix,
 	tickerPeriod time.Duration,
-) (<-chan SparseMatrix, <-chan SparseMatrix) {
+) <-chan Solution {
+	solutions := make(chan Solution)
 	matrixChan := make(chan SparseRow)
 	go func() {
 		for _, row := range matrix {
@@ -421,37 +412,20 @@ func SolveDLX(
 		close(matrixChan)
 	}()
 
-	return SolveDLXWithChannel(ctx, matrixChan, tickerPeriod)
-}
-
-func SolveDLXWithChannel(ctx context.Context, matrixChan <-chan SparseRow, tickerPeriod time.Duration) (<-chan SparseMatrix, <-chan SparseMatrix) {
-	solutions := make(chan SparseMatrix)
-	visitor, totalNodes := createNodeCounter()
-
-	var ticker <-chan time.Time
-	if tickerPeriod > 0 {
-		ticker = time.NewTicker(tickerPeriod).C
-	}
-	intermediarySolutions := make(chan SparseMatrix, 1)
-
-	isSecondaryColumn := func(colIndex int) bool {
-		return false
-	}
-
 	go func() {
+		visitor, totalNodes := createNodeCounter()
+		var ticker <-chan time.Time
+		if tickerPeriod > 0 {
+			ticker = time.NewTicker(tickerPeriod).C
+		}
+		isSecondaryColumn := func(colIndex int) bool {
+			return false
+		}
 		root := BuildDLXAsNeeded(matrixChan, isSecondaryColumn)
-		var solution []*node
-		search(ctx, root, solution, solutions, 0, visitor, ticker, intermediarySolutions) // Start with depth 0
+		search(ctx, root, nil, solutions, 0, visitor, ticker)
 		fmt.Printf("Total nodes visited: %d\n", *totalNodes)
 		close(solutions)
-		close(intermediarySolutions)
 	}()
 
-	go func() {
-		for sol := range intermediarySolutions {
-			fmt.Printf("Intermediate solution: %v\n", sol)
-		}
-	}()
-
-	return solutions, intermediarySolutions
+	return solutions
 }

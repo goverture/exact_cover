@@ -65,21 +65,23 @@ func TestSolveDLX(t *testing.T) {
 
 	sparseMatrix := SparseMatrixFromArray(matrix)
 
-	solutionsChan, _ := SolveDLX(context.Background(), sparseMatrix, -1*time.Second)
+	solutionsChan := SolveDLX(context.Background(), sparseMatrix, -1*time.Second)
 
-	// Collect all solutions into a slice
+	// Collect all final solutions into a slice
 	var solutions [][]int
 	for sol := range solutionsChan {
-		var solutionIndices []int
-		for _, row := range sol {
-			index, found := FindRowIndex(sparseMatrix, row)
-			if !found {
-				t.Errorf("Row %v not found in the matrix", row)
-				continue
+		if sol.IsFinal {
+			var solutionIndices []int
+			for _, row := range sol.Matrix {
+				index, found := FindRowIndex(sparseMatrix, row)
+				if !found {
+					t.Errorf("Row %v not found in the matrix", row)
+					continue
+				}
+				solutionIndices = append(solutionIndices, index)
 			}
-			solutionIndices = append(solutionIndices, index)
+			solutions = append(solutions, solutionIndices)
 		}
-		solutions = append(solutions, solutionIndices)
 	}
 
 	// Define expected solutions as slices of row indices
@@ -125,21 +127,23 @@ func TestSolveDLX_WithEmptyMatrix(t *testing.T) {
 
 	sparseMatrix := SparseMatrixFromArray(matrix)
 
-	solutionsChan, _ := SolveDLX(context.Background(), sparseMatrix, -1*time.Second)
+	solutionsChan := SolveDLX(context.Background(), sparseMatrix, -1*time.Second)
 
-	// Collect all solutions into a slice
+	// Collect all final solutions into a slice
 	var solutions [][]int
 	for sol := range solutionsChan {
-		var solutionIndices []int
-		for _, row := range sol {
-			index, found := FindRowIndex(sparseMatrix, row)
-			if !found {
-				t.Errorf("Row %v not found in the matrix", row)
-				continue
+		if sol.IsFinal {
+			var solutionIndices []int
+			for _, row := range sol.Matrix {
+				index, found := FindRowIndex(sparseMatrix, row)
+				if !found {
+					t.Errorf("Row %v not found in the matrix", row)
+					continue
+				}
+				solutionIndices = append(solutionIndices, index)
 			}
-			solutionIndices = append(solutionIndices, index)
+			solutions = append(solutions, solutionIndices)
 		}
-		solutions = append(solutions, solutionIndices)
 	}
 
 	// Check if the number of solutions matches

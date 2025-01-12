@@ -104,10 +104,10 @@ func TestSudokuSolver(t *testing.T) {
 	sparseMatrix := goverture.SparseMatrixFromArray(choices)
 
 	// Run the solver
-	solutionsChan, _ := goverture.SolveDLX(context.Background(), sparseMatrix, -1*time.Second)
+	solutionsChan := goverture.SolveDLX(context.Background(), sparseMatrix, -1*time.Second)
 
 	// Collect all solutions into a slice
-	var solutions []goverture.SparseMatrix
+	var solutions []goverture.Solution
 	for sol := range solutionsChan {
 		solutions = append(solutions, sol)
 	}
@@ -120,7 +120,7 @@ func TestSudokuSolver(t *testing.T) {
 	// Reconstruct each solution grid and compare with expected solutions
 	for _, sol := range solutions {
 		// Reconstruct the grid from the solution
-		reconstructedGrid, err := reconstructGrid(sol, sparseMatrix, choiceToCell)
+		reconstructedGrid, err := reconstructGrid(sol.Matrix, sparseMatrix, choiceToCell)
 		if err != nil {
 			t.Errorf("Error reconstructing grid: %v", err)
 			continue
@@ -144,7 +144,7 @@ func TestSudokuSolver(t *testing.T) {
 	for _, expected := range expectedSolutions {
 		found := false
 		for _, sol := range solutions {
-			reconstructedGrid, err := reconstructGrid(sol, sparseMatrix, choiceToCell)
+			reconstructedGrid, err := reconstructGrid(sol.Matrix, sparseMatrix, choiceToCell)
 			if err != nil {
 				continue
 			}

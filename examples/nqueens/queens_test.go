@@ -14,9 +14,10 @@ import (
 
 // canonicalSolution returns a slice of string-ified row-column lists.
 // Example: a solution with rows {0:1,5:1} and {1:1,7:1} becomes ["[0 5]", "[1 7]"] (and then sorted).
-func canonicalSolution(sol goverture.SparseMatrix) []string {
-	rows := make([]string, 0, len(sol))
-	for _, sparseRow := range sol {
+func canonicalSolution(sol goverture.Solution) []string {
+	matrix := sol.Matrix
+	rows := make([]string, 0, len(matrix))
+	for _, sparseRow := range matrix {
 		// Collect column indices in sorted order
 		cols := make([]int, 0, len(sparseRow))
 		for c := range sparseRow {
@@ -32,7 +33,7 @@ func canonicalSolution(sol goverture.SparseMatrix) []string {
 }
 
 // canonicalSolutions turns a list of solutions into a list of canonical forms, then sorts it.
-func canonicalSolutions(solutions []goverture.SparseMatrix) [][]string {
+func canonicalSolutions(solutions []goverture.Solution) [][]string {
 	canons := make([][]string, len(solutions))
 	for i, sol := range solutions {
 		canons[i] = canonicalSolution(sol)
@@ -72,10 +73,10 @@ func TestNQueensSolver_small(t *testing.T) {
 		ok, exists := secondaryColumns[colIndex]
 		return exists && ok
 	}
-	solutionsChan, _ := goverture.SolveDLXWithSecondary(context.Background(), sparseMatrix, isSecondaryColumn, -1*time.Second)
+	solutionsChan := goverture.SolveDLXWithSecondary(context.Background(), sparseMatrix, isSecondaryColumn, -1*time.Second)
 
 	// Collect solutions into a slice
-	var solutions []goverture.SparseMatrix
+	var solutions []goverture.Solution
 	for sol := range solutionsChan {
 		solutions = append(solutions, sol)
 	}
@@ -85,13 +86,19 @@ func TestNQueensSolver_small(t *testing.T) {
 		{1, 7, 8, 14},  // solution #1
 		{2, 4, 11, 13}, // solution #2
 	}
-	var expectedSolutions []goverture.SparseMatrix
+	var expectedSolutions []goverture.Solution
 	for _, rowIndices := range expectedSolutionsIndices {
 		var sol goverture.SparseMatrix
 		for _, idx := range rowIndices {
 			sol = append(sol, sparseMatrix[idx])
 		}
-		expectedSolutions = append(expectedSolutions, sol)
+		expectedSolutions = append(
+			expectedSolutions,
+			goverture.Solution{
+				IsFinal: true,
+				Matrix:  sol,
+			},
+		)
 	}
 
 	// Quick sanity check: we expect 2 solutions
@@ -135,7 +142,7 @@ func TestNQueensSolver_LargeN(t *testing.T) {
 			ok, exists := secondaryColumns[colIndex]
 			return exists && ok
 		}
-		solutionsChan, _ := goverture.SolveDLXWithSecondary(context.Background(), sparseMatrix, isSecondaryColumn, -1*time.Second)
+		solutionsChan := goverture.SolveDLXWithSecondary(context.Background(), sparseMatrix, isSecondaryColumn, -1*time.Second)
 
 		// Initialize a counter for solutions
 		var solCount uint64 = 0
@@ -202,7 +209,7 @@ func TestCancellation(t *testing.T) {
 		ok, exists := secondaryColumns[colIndex]
 		return exists && ok
 	}
-	solutionsChan, _ := goverture.SolveDLXWithSecondary(ctx, sparseMatrix, isSecondaryColumn, -1*time.Second)
+	solutionsChan := goverture.SolveDLXWithSecondary(ctx, sparseMatrix, isSecondaryColumn, -1*time.Second)
 
 	// Initialize a counter for solutions
 	var solCount uint64 = 0
@@ -249,7 +256,7 @@ func TestTimeoutCancellation(t *testing.T) {
 		ok, exists := secondaryColumns[colIndex]
 		return exists && ok
 	}
-	solutionsChan, _ := goverture.SolveDLXWithSecondary(ctx, sparseMatrix, isSecondaryColumn, -1*time.Second)
+	solutionsChan := goverture.SolveDLXWithSecondary(ctx, sparseMatrix, isSecondaryColumn, -1*time.Second)
 
 	// Initialize a counter for solutions
 	var solCount uint64 = 0

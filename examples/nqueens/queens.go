@@ -117,7 +117,7 @@ func main() {
 		return exists && ok
 	}
 
-	solutionsChan, _ := goverture.SolveDLXWithSecondary(context.Background(), sparseMatrix, isSecondaryColumn, -1*time.Second)
+	solutionsChan := goverture.SolveDLXWithSecondary(context.Background(), sparseMatrix, isSecondaryColumn, -1*time.Second)
 
 	// Collect all solutions into a slice
 	solCount := 0

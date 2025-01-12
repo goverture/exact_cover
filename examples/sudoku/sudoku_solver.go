@@ -100,10 +100,10 @@ func main() {
 
 	sparseMatrix := goverture.SparseMatrixFromArray(choices)
 
-	solutionsChan, _ := goverture.SolveDLX(context.Background(), sparseMatrix, -1*time.Second)
+	solutionsChan := goverture.SolveDLX(context.Background(), sparseMatrix, -1*time.Second)
 
 	// Collect all solutions into a slice
-	var solutions []goverture.SparseMatrix
+	var solutions []goverture.Solution
 	for sol := range solutionsChan {
 		solutions = append(solutions, sol)
 	}
@@ -152,7 +152,7 @@ func main() {
 		}
 
 		// Iterate over each row in the solution
-		for _, row := range sol {
+		for _, row := range sol.Matrix {
 			// Find the index of this row in the exact cover matrix
 			choiceIndex, found := goverture.FindRowIndex(sparseMatrix, row)
 			if !found {
