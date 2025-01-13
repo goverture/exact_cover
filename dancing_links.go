@@ -3,6 +3,7 @@ package goverture
 import (
 	"context"
 	"fmt"
+	"log"
 	"math"
 	"sort"
 	"time"
@@ -74,7 +75,9 @@ func getOrCreateColumn(colIndex int, columnsMap map[int]*column, isSecondaryColu
 
 // BuildDLXAsNeeded constructs the Dancing Links structure from the sparse matrix
 // by creating columns lazily (on-demand) as rows are processed.
-func BuildDLXAsNeeded(matrixChan <-chan SparseRow, isSecondaryColumn func(int) bool) *column {
+// It listens for context cancellation and terminates early if the context is canceled.
+// Returns the root column and an error if the context was canceled.
+func BuildDLXAsNeeded(ctx context.Context, matrixChan <-chan SparseRow, isSecondaryColumn func(int) bool) (*column, error) {
 	// 1) Create the root header
 	root := InitializeRoot()
 
@@ -82,44 +85,56 @@ func BuildDLXAsNeeded(matrixChan <-chan SparseRow, isSecondaryColumn func(int) b
 	columnsMap := make(map[int]*column)
 
 	// 3) Build all nodes while reading the rows
-	for sparseRow := range matrixChan {
-		var firstNodeInRow *node // We'll link row nodes circularly
-		var lastNodeInRow *node
+	for {
+		select {
+		case <-ctx.Done():
+			// Context canceled, terminate early
+			return root, ctx.Err()
+		case sparseRow, ok := <-matrixChan:
+			if !ok {
+				// Channel closed, DLX structure is fully built
+				goto LinkColumns
+			}
 
-		for colIndex, val := range sparseRow {
-			if val == 1 {
-				col := getOrCreateColumn(colIndex, columnsMap, isSecondaryColumn)
-				// Create the node
-				newNode := &node{C: col}
+			var firstNodeInRow *node // We'll link row nodes circularly
+			var lastNodeInRow *node
 
-				// -- Vertical insertion into the column --
-				// Link into the column ring (at the bottom)
-				newNode.U = col.U
-				newNode.D = &col.node
-				col.U.D = newNode
-				col.U = newNode
-				col.S++
+			for colIndex, val := range sparseRow {
+				if val == 1 {
+					col := getOrCreateColumn(colIndex, columnsMap, isSecondaryColumn)
+					// Create the node
+					newNode := &node{C: col}
 
-				// -- Horizontal insertion in the row --
-				if firstNodeInRow == nil {
-					// First node in this row
-					firstNodeInRow = newNode
-					lastNodeInRow = newNode
-					// Row is circular, so point to itself
-					newNode.L = newNode
-					newNode.R = newNode
-				} else {
-					// Insert to the right of lastNodeInRow
-					newNode.L = lastNodeInRow
-					newNode.R = lastNodeInRow.R
-					lastNodeInRow.R.L = newNode
-					lastNodeInRow.R = newNode
-					lastNodeInRow = newNode
+					// -- Vertical insertion into the column --
+					// Link into the column ring (at the bottom)
+					newNode.U = col.U
+					newNode.D = &col.node
+					col.U.D = newNode
+					col.U = newNode
+					col.S++
+
+					// -- Horizontal insertion in the row --
+					if firstNodeInRow == nil {
+						// First node in this row
+						firstNodeInRow = newNode
+						lastNodeInRow = newNode
+						// Row is circular, so point to itself
+						newNode.L = newNode
+						newNode.R = newNode
+					} else {
+						// Insert to the right of lastNodeInRow
+						newNode.L = lastNodeInRow
+						newNode.R = lastNodeInRow.R
+						lastNodeInRow.R.L = newNode
+						lastNodeInRow.R = newNode
+						lastNodeInRow = newNode
+					}
 				}
 			}
 		}
 	}
 
+LinkColumns:
 	// 4) Now link all columns to each other (and to the root) in sorted order of colIndex
 	//    This ensures a stable left-right traversal
 	type colWithIndex struct {
@@ -164,7 +179,7 @@ func BuildDLXAsNeeded(matrixChan <-chan SparseRow, isSecondaryColumn func(int) b
 		root.L = &prevCol.node
 	}
 
-	return root
+	return root, nil
 }
 
 // Cover removes a column from the header list and primary columns list
@@ -261,11 +276,11 @@ func search(
 	depth int,
 	visit NodeVisitor,
 	ticker <-chan time.Time,
-) {
+) error {
 	// Check for context cancellation
 	select {
 	case <-ctx.Done():
-		return
+		return ctx.Err()
 	case <-ticker:
 		if len(solution) > 0 {
 			currentSolution := make(SparseMatrix, len(solution))
@@ -276,7 +291,7 @@ func search(
 			select {
 			case solutions <- Solution{IsFinal: false, Matrix: currentSolution}:
 			case <-ctx.Done():
-				return
+				return ctx.Err()
 			}
 		}
 	default:
@@ -284,7 +299,7 @@ func search(
 
 	if noPrimaryColumnsLeft(root) {
 		if len(solution) == 0 {
-			return
+			return nil // No primary columns left, but no solution found
 		}
 
 		// Found a final solution
@@ -295,17 +310,17 @@ func search(
 		// Send final solution
 		select {
 		case solutions <- Solution{IsFinal: true, Matrix: currentSolution}:
+			return nil
 		case <-ctx.Done():
-			return
+			return ctx.Err()
 		}
-		return
 	}
 
 	// Choose the primary column with the smallest size (heuristic)
 	col := chooseColumn(root)
 	// If there are no 1s left in the column, it's a dead end
 	if col == nil || col.S == 0 {
-		return
+		return nil
 	}
 
 	if visit != nil {
@@ -320,8 +335,7 @@ func search(
 		// Check for context cancellation
 		select {
 		case <-ctx.Done():
-			Uncover(col)
-			return
+			return ctx.Err()
 		default:
 		}
 		// Add the row to the current solution
@@ -346,14 +360,14 @@ func search(
 		// Check for context cancellation
 		select {
 		case <-ctx.Done():
-			Uncover(col)
-			return
+			return ctx.Err()
 		default:
 		}
 	}
 
 	// Uncover the chosen column
 	Uncover(col)
+	return nil
 }
 
 // createNodeCounter is just a helper to track how many nodes we visit
@@ -399,13 +413,35 @@ func SolveDLXWithChannelAndSecondary(
 	}
 
 	go func() {
+		defer close(solutions)
+
 		// root := BuildDLX(matrix, secondaryColumns)
-		root := BuildDLXAsNeeded(matrixChan, isSecondaryColumn)
+		root, err := BuildDLXAsNeeded(ctx, matrixChan, isSecondaryColumn)
+		if err != nil {
+			if ctx.Err() != nil {
+				// Context was canceled, expected termination
+				fmt.Println("BuildDLXAsNeeded was canceled.")
+			} else {
+				// Handle unexpected errors
+				log.Printf("BuildDLXAsNeeded encountered an error: %v\n", err)
+			}
+			return // Exit the goroutine early
+		}
+
 		var solution []*node
-		search(ctx, root, solution, solutions, 0, visitor, ticker) // Start with depth 0
-		root = nil                                                 // Release the root
-		fmt.Printf("Total nodes visited: %d\n", *totalNodes)
-		close(solutions)
+		err = search(ctx, root, solution, solutions, 0, visitor, ticker) // Start with depth 0
+		root = nil                                                       // Release the root
+		if err != nil {
+			if ctx.Err() != nil {
+				// Context was canceled, expected termination
+				fmt.Println("Search was canceled.")
+			} else {
+				// Handle unexpected errors
+				log.Printf("Search encountered an error: %v\n", err)
+			}
+		} else {
+			fmt.Printf("Total nodes visited: %d\n", *totalNodes)
+		}
 	}()
 
 	return solutions
@@ -442,11 +478,34 @@ func SolveDLXWithChannel(ctx context.Context, matrixChan <-chan SparseRow, ticke
 	}
 
 	go func() {
-		root := BuildDLXAsNeeded(matrixChan, isSecondaryColumn)
+		defer close(solutions)
+
+		root, err := BuildDLXAsNeeded(ctx, matrixChan, isSecondaryColumn)
+		if err != nil {
+			if ctx.Err() != nil {
+				// Context was canceled, expected termination
+				fmt.Println("BuildDLXAsNeeded was canceled.")
+			} else {
+				// Handle unexpected errors
+				log.Printf("BuildDLXAsNeeded encountered an error: %v\n", err)
+			}
+			return // Exit the goroutine early
+		}
+
 		var solution []*node
-		search(ctx, root, solution, solutions, 0, visitor, ticker) // Start with depth 0
-		fmt.Printf("Total nodes visited: %d\n", *totalNodes)
-		close(solutions)
+		err = search(ctx, root, solution, solutions, 0, visitor, ticker) // Start with depth 0
+		root = nil
+		if err != nil {
+			if ctx.Err() != nil {
+				// Context was canceled, expected termination
+				fmt.Println("Search was canceled.")
+			} else {
+				// Handle unexpected errors
+				log.Printf("Search encountered an error: %v\n", err)
+			}
+		} else {
+			fmt.Printf("Total nodes visited: %d\n", *totalNodes)
+		}
 	}()
 
 	return solutions

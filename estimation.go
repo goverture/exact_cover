@@ -1,6 +1,7 @@
 package goverture
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"time"
@@ -27,7 +28,7 @@ func EstimateDLX(matrix [][]int, numSamples int) float64 {
 		return exists && ok
 	}
 
-	root := BuildDLXAsNeeded(matrixChan, isSecondaryColumn)
+	root, _ := BuildDLXAsNeeded(context.Background(), matrixChan, isSecondaryColumn)
 	rand.Seed(time.Now().UnixNano()) // Seed the random number generator
 
 	var totalEstimate float64 = 0
@@ -56,7 +57,7 @@ func EstimateDLXWithSecondary(matrix [][]int, secondaryColumns map[int]bool, num
 		return exists && ok
 	}
 
-	root := BuildDLXAsNeeded(matrixChan, isSecondaryColumn)
+	root, _ := BuildDLXAsNeeded(context.Background(), matrixChan, isSecondaryColumn)
 	rand.Seed(time.Now().UnixNano()) // Seed the random number generator
 
 	var totalEstimate float64 = 0
