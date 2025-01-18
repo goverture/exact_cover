@@ -11,6 +11,11 @@ import (
 
 // Type definitions for SparseRow, SparseMatrix, and Solution
 type SparseRow map[int]int
+type WordOption struct {
+	Row SparseRow
+	Word string
+	IsThematic bool 
+}
 type SparseMatrix []SparseRow
 
 // Solution represents a solution with a flag indicating if it's final.
@@ -18,6 +23,8 @@ type Solution struct {
 	IsFinal bool
 	Matrix  SparseMatrix
 }
+
+var thematicIndex = math.MaxInt64
 
 // node represents each '1' in the matrix
 type node struct {
@@ -77,7 +84,7 @@ func getOrCreateColumn(colIndex int, columnsMap map[int]*column, isSecondaryColu
 // by creating columns lazily (on-demand) as rows are processed.
 // It listens for context cancellation and terminates early if the context is canceled.
 // Returns the root column and an error if the context was canceled.
-func BuildDLXAsNeeded(ctx context.Context, matrixChan <-chan SparseRow, isSecondaryColumn func(int) bool) (*column, error) {
+func BuildDLXAsNeeded(ctx context.Context, matrixChan <-chan WordOption, isSecondaryColumn func(int) bool) (*column, error) {
 	// 1) Create the root header
 	root := InitializeRoot()
 
@@ -90,7 +97,7 @@ func BuildDLXAsNeeded(ctx context.Context, matrixChan <-chan SparseRow, isSecond
 		case <-ctx.Done():
 			// Context canceled, terminate early
 			return root, ctx.Err()
-		case sparseRow, ok := <-matrixChan:
+		case wordOption, ok := <-matrixChan:
 			if !ok {
 				// Channel closed, DLX structure is fully built
 				goto LinkColumns
@@ -99,9 +106,15 @@ func BuildDLXAsNeeded(ctx context.Context, matrixChan <-chan SparseRow, isSecond
 			var firstNodeInRow *node // We'll link row nodes circularly
 			var lastNodeInRow *node
 
+			sparseRow := wordOption.Row
+
 			for colIndex, val := range sparseRow {
 				if val == 1 {
 					col := getOrCreateColumn(colIndex, columnsMap, isSecondaryColumn)
+					if wordOption.IsThematic && !col.IsPrimary {
+						println("Thematic word, sec column")
+						thematicIndex = min(thematicIndex, colIndex)
+					}
 					// Create the node
 					newNode := &node{C: col}
 
@@ -183,7 +196,9 @@ LinkColumns:
 }
 
 // Cover removes a column from the header list and primary columns list
-func Cover(col *column) {
+func Cover(col *column) bool {
+	becomesZeroS := false
+
 	// If the column is primary, remove it from the primary columns list
 	if col.IsPrimary {
 		col.PrimaryRight.PrimaryLeft = col.PrimaryLeft
@@ -201,8 +216,15 @@ func Cover(col *column) {
 			j.D.U = j.U
 			j.U.D = j.D
 			j.C.S--
+
+			// Check if the column becomes empty
+			if j.C.IsPrimary && j.C.S <= 0 {
+				becomesZeroS = true
+			}
 		}
 	}
+
+	return becomesZeroS
 }
 
 // Uncover restores a previously covered column and updates the primary columns list
@@ -229,14 +251,28 @@ func Uncover(col *column) {
 }
 
 // chooseColumn selects the primary column with the smallest size (fewest 1s)
-func chooseColumn(root *column) *column {
+func chooseColumn(root *column, useThematic bool, idx int) *column {
+	// Prioritize the thematic words:
+	if useThematic && root.L != nil {
+		skipped := 0
+		for c := root.L.C; c.Index >= thematicIndex; c = c.L.C {
+			if skipped < idx {
+				skipped++
+				continue
+			}
+			if !c.IsPrimary && c.S != 0 { // last words for the last slots
+				return c
+			}
+		}
+	}
+
 	minSize := math.MaxInt64
 	var chosen *column
 	for col := root.PrimaryRight; col != root; col = col.PrimaryRight {
 		if col.S < minSize {
 			minSize = col.S
 			chosen = col
-			if minSize == 0 {
+			if minSize == 0 { // TODO: break at 1 ?
 				break // Can't get smaller than 0
 			}
 		}
@@ -317,56 +353,66 @@ func search(
 	}
 
 	// Choose the primary column with the smallest size (heuristic)
-	col := chooseColumn(root)
-	// If there are no 1s left in the column, it's a dead end
-	if col == nil || col.S == 0 {
-		return nil
+	for idx, useThematic := range []bool{true, true, true, false} {
+		if useThematic && depth > 8 {
+			continue
+		}
+
+	    col := chooseColumn(root, useThematic, idx) // TODO: how can we go through all possible secondary columns though ?
+		// If there are no 1s left in the column, it's a dead end
+		if col == nil || col.S == 0 {
+			continue
+		}
+
+		// if visit != nil {
+		// 	visit(depth)
+		// }
+
+		// Cover the chosen column
+		becomesZeroS := Cover(col)
+		if false && becomesZeroS {
+			Uncover(col)
+			continue
+		}
+
+		// Iterate through each row in the column
+		for i := col.D; i != &col.node; i = i.D {
+			// Check for context cancellation
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
+			// Add the row to the current solution
+			solution = append(solution, i)
+
+			// Cover all columns for each node in the row
+			for j := i.R; j != i; j = j.R {
+				Cover(j.C)
+			}
+
+			// Recurse with increased depth
+			search(ctx, root, solution, solutions, depth+1, visit, ticker)
+
+			// Backtrack: remove the row from the current solution
+			solution = solution[:len(solution)-1]
+
+			// Uncover all columns for each node in the row in reverse order
+			for j := i.L; j != i; j = j.L {
+				Uncover(j.C)
+			}
+
+			// Check for context cancellation
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
+		}
+
+		// Uncover the chosen column
+		Uncover(col)
 	}
-
-	if visit != nil {
-		visit(depth)
-	}
-
-	// Cover the chosen column
-	Cover(col)
-
-	// Iterate through each row in the column
-	for i := col.D; i != &col.node; i = i.D {
-		// Check for context cancellation
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-		// Add the row to the current solution
-		solution = append(solution, i)
-
-		// Cover all columns for each node in the row
-		for j := i.R; j != i; j = j.R {
-			Cover(j.C)
-		}
-
-		// Recurse with increased depth
-		search(ctx, root, solution, solutions, depth+1, visit, ticker)
-
-		// Backtrack: remove the row from the current solution
-		solution = solution[:len(solution)-1]
-
-		// Uncover all columns for each node in the row in reverse order
-		for j := i.L; j != i; j = j.L {
-			Uncover(j.C)
-		}
-
-		// Check for context cancellation
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-	}
-
-	// Uncover the chosen column
-	Uncover(col)
 	return nil
 }
 
@@ -387,10 +433,10 @@ func SolveDLXWithSecondary(
 	isSecondaryColumn func(int) bool,
 	tickerPeriod time.Duration,
 ) <-chan Solution {
-	matrixChan := make(chan SparseRow)
+	matrixChan := make(chan WordOption)
 	go func() {
 		for _, row := range matrix {
-			matrixChan <- row
+			matrixChan <- WordOption{Row: row}
 		}
 		close(matrixChan)
 	}()
@@ -400,7 +446,7 @@ func SolveDLXWithSecondary(
 
 func SolveDLXWithChannelAndSecondary(
 	ctx context.Context,
-	matrixChan <-chan SparseRow,
+	matrixChan <-chan WordOption,
 	isSecondaryColumn func(int) bool,
 	tickerPeriod time.Duration,
 ) <-chan Solution {
@@ -453,10 +499,10 @@ func SolveDLX(
 	matrix SparseMatrix,
 	tickerPeriod time.Duration,
 ) <-chan Solution {
-	matrixChan := make(chan SparseRow)
+	matrixChan := make(chan WordOption)
 	go func() {
 		for _, row := range matrix {
-			matrixChan <- row
+			matrixChan <- WordOption{Row: row}
 		}
 		close(matrixChan)
 	}()
@@ -464,7 +510,7 @@ func SolveDLX(
 	return SolveDLXWithChannel(ctx, matrixChan, tickerPeriod)
 }
 
-func SolveDLXWithChannel(ctx context.Context, matrixChan <-chan SparseRow, tickerPeriod time.Duration) <-chan Solution {
+func SolveDLXWithChannel(ctx context.Context, matrixChan <-chan WordOption, tickerPeriod time.Duration) <-chan Solution {
 	solutions := make(chan Solution)
 	visitor, totalNodes := createNodeCounter()
 

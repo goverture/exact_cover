@@ -15,10 +15,10 @@ func EstimateDLX(matrix [][]int, numSamples int) float64 {
 
 	sparseMatrix := SparseMatrixFromArray(matrix)
 
-	matrixChan := make(chan SparseRow)
+	matrixChan := make(chan WordOption)
 	go func() {
 		for _, row := range sparseMatrix {
-			matrixChan <- row
+			matrixChan <- WordOption{Row: row}
 		}
 		close(matrixChan)
 	}()
@@ -44,10 +44,10 @@ func EstimateDLX(matrix [][]int, numSamples int) float64 {
 func EstimateDLXWithSecondary(matrix [][]int, secondaryColumns map[int]bool, numSamples int) float64 {
 	sparseMatrix := SparseMatrixFromArray(matrix)
 
-	matrixChan := make(chan SparseRow)
+	matrixChan := make(chan WordOption)
 	go func() {
 		for _, row := range sparseMatrix {
-			matrixChan <- row
+			matrixChan <- WordOption{Row: row}
 		}
 		close(matrixChan)
 	}()
@@ -77,7 +77,7 @@ func estimateRandomWalk(root *column, depth int) float64 {
 	}
 
 	// Choose the primary column with the smallest size (heuristic)
-	col := chooseColumn(root)
+	col := chooseColumn(root, true, 0)
 	if col == nil || col.S == 0 {
 		// Dead end
 		return 1.0
