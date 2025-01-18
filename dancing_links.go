@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"math/rand"
 	"sort"
 	"time"
 )
@@ -80,11 +81,15 @@ func getOrCreateColumn(colIndex int, columnsMap map[int]*column, isSecondaryColu
 	return c
 }
 
+var ThematicColsForPrimaryColsIDX map[int][]*column
+
 // BuildDLXAsNeeded constructs the Dancing Links structure from the sparse matrix
 // by creating columns lazily (on-demand) as rows are processed.
 // It listens for context cancellation and terminates early if the context is canceled.
 // Returns the root column and an error if the context was canceled.
 func BuildDLXAsNeeded(ctx context.Context, matrixChan <-chan WordOption, isSecondaryColumn func(int) bool) (*column, error) {
+	ThematicColsForPrimaryColsIDX = make(map[int][]*column)
+
 	// 1) Create the root header
 	root := InitializeRoot()
 
@@ -114,6 +119,13 @@ func BuildDLXAsNeeded(ctx context.Context, matrixChan <-chan WordOption, isSecon
 					if wordOption.IsThematic && !col.IsPrimary {
 						println("Thematic word, sec column")
 						thematicIndex = min(thematicIndex, colIndex)
+						// fill the coldIndexes from sparseRow into ThematicColsIDXForPrimaryColsIDX
+						for idx := range sparseRow {
+							if _, ok := ThematicColsForPrimaryColsIDX[colIndex]; !ok {
+								ThematicColsForPrimaryColsIDX[colIndex] = make([]*column, 0)
+							}
+							ThematicColsForPrimaryColsIDX[idx] = append(ThematicColsForPrimaryColsIDX[colIndex], col)
+						}
 					}
 					// Create the node
 					newNode := &node{C: col}
@@ -252,32 +264,36 @@ func Uncover(col *column) {
 
 // chooseColumn selects the primary column with the smallest size (fewest 1s)
 func chooseColumn(root *column, useThematic bool, idx int) *column {
-	// Prioritize the thematic words:
-	if useThematic && root.L != nil {
-		skipped := 0
-		for c := root.L.C; c.Index >= thematicIndex; c = c.L.C {
-			if skipped < idx {
-				skipped++
-				continue
-			}
-			if !c.IsPrimary && c.S != 0 { // last words for the last slots
-				return c
-			}
-		}
-	}
-
 	minSize := math.MaxInt64
-	var chosen *column
+	chosen := make([]*column, 0)
 	for col := root.PrimaryRight; col != root; col = col.PrimaryRight {
 		if col.S < minSize {
 			minSize = col.S
-			chosen = col
-			if minSize == 0 { // TODO: break at 1 ?
-				break // Can't get smaller than 0
-			}
+			//chosen = chosen[:0] // empty the slice
+			chosen = append(chosen, col)
+			// if minSize == 0 { // TODO: break at 1 ?
+			// 	break // Can't get smaller than 0
+			// }
+		} else if col.S == minSize {
+			chosen = append(chosen, col)
 		}
 	}
-	return chosen
+
+	// Let's try to pick a thematic word that have this column
+	// Prioritize the thematic words:
+	if useThematic && root.L != nil {
+		println("Thematic word")
+		for _, c := range chosen {
+			if vals, ok := ThematicColsForPrimaryColsIDX[c.Index]; ok {
+				// pick a random column among vals
+				randIdx := rand.Intn(len(vals))
+				col := vals[randIdx]
+				return col
+			}
+		}
+    }
+
+	return chosen[0]
 }
 
 func RebuildRowFromNode(n *node) SparseRow {
@@ -353,8 +369,8 @@ func search(
 	}
 
 	// Choose the primary column with the smallest size (heuristic)
-	for idx, useThematic := range []bool{true, true, true, false} {
-		if useThematic && depth > 8 {
+	for idx, useThematic := range []bool{true, false} {
+		if useThematic && depth > 10 {
 			continue
 		}
 
