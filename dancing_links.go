@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 	"math"
-	"math/rand"
+	"math/rand/v2"
 	"sort"
 	"time"
 )
@@ -89,6 +89,7 @@ var ThematicColsForPrimaryColsIDX map[int][]*column
 // Returns the root column and an error if the context was canceled.
 func BuildDLXAsNeeded(ctx context.Context, matrixChan <-chan WordOption, isSecondaryColumn func(int) bool) (*column, error) {
 	ThematicColsForPrimaryColsIDX = make(map[int][]*column)
+	thematicWordCount = 0
 
 	// 1) Create the root header
 	root := InitializeRoot()
@@ -189,7 +190,7 @@ LinkColumns:
 		prevCol = col
 
 		// Also link into the primary columns list if needed
-		if col.IsPrimary {
+		if (col.IsPrimary) {
 			// Insert into the primary columns circular list to the right of `root`
 			col.PrimaryLeft = root
 			col.PrimaryRight = root.PrimaryRight
@@ -263,13 +264,30 @@ func Uncover(col *column) {
 }
 
 // chooseColumn selects the primary column with the smallest size (fewest 1s)
-func chooseColumn(root *column, useThematic bool, idx int) *column {
+func chooseColumn(root *column, useThematic bool, idx int) []*column {
+
+	// Prioritize the thematic words:
+	if useThematic && root.L != nil {
+        thematicColumns := []*column{}
+        for c := root.L.C; c.Index >= thematicIndex; c = c.L.C {
+            if !c.IsPrimary && c.S != 0 { // last words for the last slots
+                thematicColumns = append(thematicColumns, c)
+            }
+        }
+
+		rand.Shuffle(len(thematicColumns), func(i, j int) {
+			thematicColumns[i], thematicColumns[j] = thematicColumns[j], thematicColumns[i]
+		})
+		return thematicColumns
+
+    }
+
 	minSize := math.MaxInt64
 	chosen := make([]*column, 0)
 	for col := root.PrimaryRight; col != root; col = col.PrimaryRight {
 		if col.S < minSize {
 			minSize = col.S
-			//chosen = chosen[:0] // empty the slice
+			chosen = chosen[:0] // empty the slice
 			chosen = append(chosen, col)
 			// if minSize == 0 { // TODO: break at 1 ?
 			// 	break // Can't get smaller than 0
@@ -279,21 +297,8 @@ func chooseColumn(root *column, useThematic bool, idx int) *column {
 		}
 	}
 
-	// Let's try to pick a thematic word that have this column
-	// Prioritize the thematic words:
-	if useThematic && root.L != nil {
-		println("Thematic word")
-		for _, c := range chosen {
-			if vals, ok := ThematicColsForPrimaryColsIDX[c.Index]; ok {
-				// pick a random column among vals
-				randIdx := rand.Intn(len(vals))
-				col := vals[randIdx]
-				return col
-			}
-		}
-    }
-
-	return chosen[0]
+	 // randomly chose
+	return chosen
 }
 
 func RebuildRowFromNode(n *node) SparseRow {
@@ -318,6 +323,7 @@ func noPrimaryColumnsLeft(root *column) bool {
 // NodeVisitor is called at each depth for debugging or counting
 type NodeVisitor func(depth int)
 
+var thematicWordCount int
 // search recursively finds all exact covers, with context for cancellation
 // Sends solutions to a single channel with a flag indicating if it's final.
 func search(
@@ -369,12 +375,21 @@ func search(
 	}
 
 	// Choose the primary column with the smallest size (heuristic)
-	for idx, useThematic := range []bool{true, false} {
-		if useThematic && depth > 10 {
-			continue
-		}
+	colsThematic := chooseColumn(root, true, 0)
+	otherCols := chooseColumn(root, false, 0)
 
-	    col := chooseColumn(root, useThematic, idx) // TODO: how can we go through all possible secondary columns though ?
+	// Safely append the first 4 elements of colsThematic and the first element of otherCols
+	colsToChek := make([]*column, 0, 10)
+	lenCoLThematic := 0
+	if thematicWordCount < 2 && len(colsThematic) > 0 {
+		lenCoLThematic = min(8, len(colsThematic))
+		colsToChek = append(colsToChek, colsThematic[:lenCoLThematic]...)
+	}
+	if len(otherCols) > 0 {
+		colsToChek = append(colsToChek, otherCols[0])
+	}
+
+	for _, col := range colsToChek {
 		// If there are no 1s left in the column, it's a dead end
 		if col == nil || col.S == 0 {
 			continue
@@ -392,7 +407,11 @@ func search(
 		}
 
 		// Iterate through each row in the column
-		for i := col.D; i != &col.node; i = i.D {
+		for i := col.D; i != &col.node; i = i.D { // So ideally we want to start with the row that is thematic, how to do that ?
+			if(!col.IsPrimary) { 
+				thematicWordCount += 1
+			}
+
 			// Check for context cancellation
 			select {
 			case <-ctx.Done():
@@ -423,6 +442,11 @@ func search(
 			case <-ctx.Done():
 				return ctx.Err()
 			default:
+			}
+
+			if(!col.IsPrimary) {
+				thematicWordCount -= 1
+				break; // We only cared about the first row
 			}
 		}
 
@@ -504,6 +528,7 @@ func SolveDLXWithChannelAndSecondary(
 		} else {
 			fmt.Printf("Total nodes visited: %d\n", *totalNodes)
 		}
+		println("total thematic words ", thematicWordCount)
 	}()
 
 	return solutions
@@ -566,9 +591,17 @@ func SolveDLXWithChannel(ctx context.Context, matrixChan <-chan WordOption, tick
 				log.Printf("Search encountered an error: %v\n", err)
 			}
 		} else {
+// Helper function to get the minimum of two integers
 			fmt.Printf("Total nodes visited: %d\n", *totalNodes)
 		}
 	}()
 
 	return solutions
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
