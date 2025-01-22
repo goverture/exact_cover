@@ -15,7 +15,8 @@ type SparseRow map[int]int
 type WordOption struct {
 	Row SparseRow
 	Word string
-	IsThematic bool 
+	IsThematic bool
+	ThematicColIndex int
 }
 type SparseMatrix []SparseRow
 
@@ -25,7 +26,7 @@ type Solution struct {
 	Matrix  SparseMatrix
 }
 
-var thematicIndex = math.MaxInt64
+var thematicIndex int // TODO: urgent, not thread safe
 
 // node represents each '1' in the matrix
 type node struct {
@@ -90,6 +91,7 @@ var ThematicColsForPrimaryColsIDX map[int][]*column
 func BuildDLXAsNeeded(ctx context.Context, matrixChan <-chan WordOption, isSecondaryColumn func(int) bool) (*column, error) {
 	ThematicColsForPrimaryColsIDX = make(map[int][]*column)
 	thematicWordCount = 0
+	thematicIndex = math.MaxInt64
 
 	// 1) Create the root header
 	root := InitializeRoot()
@@ -118,8 +120,7 @@ func BuildDLXAsNeeded(ctx context.Context, matrixChan <-chan WordOption, isSecon
 				if val == 1 {
 					col := getOrCreateColumn(colIndex, columnsMap, isSecondaryColumn)
 					if wordOption.IsThematic && !col.IsPrimary {
-						println("Thematic word, sec column")
-						thematicIndex = min(thematicIndex, colIndex)
+						thematicIndex = min(thematicIndex, wordOption.ThematicColIndex)
 						// fill the coldIndexes from sparseRow into ThematicColsIDXForPrimaryColsIDX
 						for idx := range sparseRow {
 							if _, ok := ThematicColsForPrimaryColsIDX[colIndex]; !ok {
@@ -265,6 +266,20 @@ func Uncover(col *column) {
 
 // chooseColumn selects the primary column with the smallest size (fewest 1s)
 func chooseColumn(root *column, useThematic bool, idx int) []*column {
+	minSize := math.MaxInt64
+	chosen := make([]*column, 0)
+	for col := root.PrimaryRight; col != root; col = col.PrimaryRight {
+		if col.S < minSize {
+			minSize = col.S
+			chosen = chosen[:0] // empty the slice
+			chosen = append(chosen, col)
+			if minSize == 0 { // TODO: break at 1 ?
+				return []*column{} // Can't get smaller than 0
+			}
+		} else if col.S == minSize {
+			chosen = append(chosen, col)
+		}
+	}
 
 	// Prioritize the thematic words:
 	if useThematic && root.L != nil {
@@ -278,24 +293,9 @@ func chooseColumn(root *column, useThematic bool, idx int) []*column {
 		rand.Shuffle(len(thematicColumns), func(i, j int) {
 			thematicColumns[i], thematicColumns[j] = thematicColumns[j], thematicColumns[i]
 		})
+
 		return thematicColumns
-
     }
-
-	minSize := math.MaxInt64
-	chosen := make([]*column, 0)
-	for col := root.PrimaryRight; col != root; col = col.PrimaryRight {
-		if col.S < minSize {
-			minSize = col.S
-			chosen = chosen[:0] // empty the slice
-			chosen = append(chosen, col)
-			// if minSize == 0 { // TODO: break at 1 ?
-			// 	break // Can't get smaller than 0
-			// }
-		} else if col.S == minSize {
-			chosen = append(chosen, col)
-		}
-	}
 
 	 // randomly chose
 	return chosen
@@ -375,18 +375,20 @@ func search(
 	}
 
 	// Choose the primary column with the smallest size (heuristic)
-	colsThematic := chooseColumn(root, true, 0)
-	otherCols := chooseColumn(root, false, 0)
+	
 
 	// Safely append the first 4 elements of colsThematic and the first element of otherCols
-	colsToChek := make([]*column, 0, 10)
+	colsToChek := make([]*column, 0)
 	lenCoLThematic := 0
-	if thematicWordCount < 2 && len(colsThematic) > 0 {
-		lenCoLThematic = min(8, len(colsThematic))
+	if thematicWordCount < 4 {
+		colsThematic := chooseColumn(root, true, 0)
+		lenCoLThematic = min(100, len(colsThematic))
 		colsToChek = append(colsToChek, colsThematic[:lenCoLThematic]...)
 	}
+
+	otherCols := chooseColumn(root, false, 0)
 	if len(otherCols) > 0 {
-		colsToChek = append(colsToChek, otherCols[0])
+		colsToChek = append(colsToChek, otherCols[:1]...) // Append only the first element
 	}
 
 	for _, col := range colsToChek {
