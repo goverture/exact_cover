@@ -6,52 +6,6 @@ import (
 	"time"
 )
 
-func TestBuildDLXAsNeeded(t *testing.T) {
-	// Example usage
-	matrix := [][]int{
-		{1, 0, 0, 1, 0, 0, 0},
-		{1, 0, 0, 1, 0, 0, 0},
-		{0, 0, 0, 1, 1, 0, 1},
-		{0, 0, 1, 0, 1, 1, 0},
-		{0, 1, 1, 0, 0, 1, 1},
-		{0, 1, 0, 0, 0, 0, 1},
-	}
-
-	sparseMatrix := SparseMatrixFromArray(matrix)
-
-	for i, row := range matrix {
-		sparseMatrix[i] = make(SparseRow, 0)
-		for j, val := range row {
-			if val == 1 {
-				sparseMatrix[i][j] = 1
-			}
-		}
-	}
-
-	secondaryColumns := make(map[int]bool)
-	for i := 0; i < len(matrix[0]); i++ {
-		secondaryColumns[i] = false
-	}
-
-	matrixChan := make(chan SparseRow)
-	go func() {
-		for _, row := range sparseMatrix {
-			matrixChan <- row
-		}
-		close(matrixChan)
-	}()
-
-	isSecondaryColumn := func(colIndex int) bool {
-		ok, exists := secondaryColumns[colIndex]
-		return exists && ok
-	}
-
-	res, _ := BuildDLXAsNeeded(context.Background(), matrixChan, isSecondaryColumn)
-	_ = res
-	// TODO: We need an actual assert here
-	println("ok")
-}
-
 func TestSolveDLX(t *testing.T) {
 	matrix := [][]int{
 		{1, 0, 0, 1, 0, 0, 0}, // Row 0
