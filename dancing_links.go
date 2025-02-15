@@ -492,7 +492,7 @@ func SolveDLXWithChannelAndSecondary(
 	isSecondaryColumn func(int) bool,
 	tickerPeriod time.Duration,
 ) <-chan Solution {
-	solutions := make(chan Solution)
+	solutions := make(chan Solution, 50)
 	visitor, totalNodes := createNodeCounter()
 
 	var ticker <-chan time.Time
@@ -554,7 +554,7 @@ func SolveDLX(
 }
 
 func SolveDLXWithChannel(ctx context.Context, matrixChan <-chan WordOption, tickerPeriod time.Duration) <-chan Solution {
-	solutions := make(chan Solution)
+	solutions := make(chan Solution, 50)
 	visitor, totalNodes := createNodeCounter()
 
 	var ticker <-chan time.Time
