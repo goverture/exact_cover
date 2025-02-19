@@ -18,7 +18,7 @@ type Column struct {
 }
 
 // Hide an option
-func hide(p int, columns []Column, nodes []Node) {
+func hide(p int, nodes []Node) {
 	q := p + 1
 	for q != p {
 		x := nodes[q].top
@@ -36,7 +36,7 @@ func hide(p int, columns []Column, nodes []Node) {
 }
 
 // Unhide an option
-func unhide(p int, columns []Column, nodes []Node) {
+func unhide(p int, nodes []Node) {
 	q := p - 1
 	for q != p {
 		x := nodes[q].top
@@ -57,7 +57,7 @@ func unhide(p int, columns []Column, nodes []Node) {
 func cover(i int, columns []Column, nodes []Node) {
 	p := nodes[i].dlink
 	for p != i {
-		hide(p, columns, nodes)
+		hide(p, nodes)
 		p = nodes[p].dlink
 	}
 
@@ -76,7 +76,7 @@ func uncover(i int, columns []Column, nodes []Node) {
 
 	p := nodes[i].ulink
 	for p != i {
-		unhide(p, columns, nodes)
+		unhide(p, nodes)
 		p = nodes[p].ulink
 	}
 }
@@ -171,7 +171,7 @@ func main() {
 
 	var prevOptionFirstIndex int
 	
-	for _, option := range(options) {
+	for optionIndex, option := range(options) {
 		// Count how many items are in the option
 		itemsCount := 0
 		for _, i := range(option) {
@@ -183,7 +183,7 @@ func main() {
 		// Insert a Spacer node
 		elementCount := len(nodes)
 		nodes = append(nodes, Node{
-			top: 0,
+			top: -optionIndex, // negative value to indicate that it is a spacer
 			ulink: prevOptionFirstIndex, // address of the first node in the option before the spacer
 			dlink: elementCount + itemsCount, // address of the last node in the option after the spacer (ie the current option)
 		})
@@ -211,9 +211,9 @@ func main() {
 	}
 	// TODO: Add a spacer node at the end of the list
 	nodes = append(nodes, Node{
-		top: 0,
+		top: -len(options), // negative value to indicate that it is a spacer
 		ulink: prevOptionFirstIndex, // address of the first node in the option before the spacer
-		dlink: 0,
+		dlink: 0, // unused
 	})
 
 	solution := []int{}
