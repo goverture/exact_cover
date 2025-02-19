@@ -19,15 +19,15 @@ type Column struct {
 func hide(p int, nodes []Node) {
 	q := p + 1
 	for q != p {
-		x := nodes[q].top
-		u := nodes[q].ulink
-		d := nodes[q].dlink
+		x := nodes[q].Top
+		u := nodes[q].Ulink
+		d := nodes[q].Dlink
 		if x <= 0 {
 			q = u // q was a spacer
 		} else {
-			nodes[u].dlink = d
-			nodes[d].ulink = u
-			nodes[x].top -= 1
+			nodes[u].Dlink = d
+			nodes[d].Ulink = u
+			nodes[x].Top -= 1
 			q = q + 1
 		}
 	}
@@ -37,15 +37,15 @@ func hide(p int, nodes []Node) {
 func unhide(p int, nodes []Node) {
 	q := p - 1
 	for q != p {
-		x := nodes[q].top
-		u := nodes[q].ulink
-		d := nodes[q].dlink
+		x := nodes[q].Top
+		u := nodes[q].Ulink
+		d := nodes[q].Dlink
 		if x <= 0 {
 			q = d // q was a spacer
 		} else {
-			nodes[u].dlink = q
-			nodes[d].ulink = q
-			nodes[x].top += 1
+			nodes[u].Dlink = q
+			nodes[d].Ulink = q
+			nodes[x].Top += 1
 			q = q - 1
 		}
 	}
@@ -53,56 +53,49 @@ func unhide(p int, nodes []Node) {
 
 // Cover an item
 func cover(i int, columns []Column, nodes []Node) {
-	p := nodes[i].dlink
+	p := nodes[i].Dlink
 	for p != i {
 		hide(p, nodes)
-		p = nodes[p].dlink
+		p = nodes[p].Dlink
 	}
 
-	l := columns[i].llink
-	r := columns[i].rlink
-	columns[l].rlink = r
-	columns[r].llink = l
+	l := columns[i].Llink
+	r := columns[i].Rlink
+	columns[l].Rlink = r
+	columns[r].Llink = l
 }
 
 // Uncover an item
 func uncover(i int, columns []Column, nodes []Node) {
-	l := columns[i].llink
-	r := columns[i].rlink
-	columns[l].rlink = i
-	columns[r].llink = i
+	l := columns[i].Llink
+	r := columns[i].Rlink
+	columns[l].Rlink = i
+	columns[r].Llink = i
 
-	p := nodes[i].ulink
+	p := nodes[i].Ulink
 	for p != i {
 		unhide(p, nodes)
-		p = nodes[p].ulink
+		p = nodes[p].Ulink
 	}
 }
 
 // Implementation of the Algorithm X ("Exact cover via dancing links") from Knuth's paper
 func SolveExactCover(columns []Column, nodes []Node, solution []int, visitSolution func([]int)) {
-	// l := 0 // level
-
-	// X2
-	if(columns[0].rlink == 0) {
+	if columns[0].Rlink == 0 {
 		visitSolution(solution)
 		return
 	}
 
-	// X3
-	i := columns[0].rlink // TODO: better choice of i
-
-	// X4
+	i := columns[0].Rlink
 	cover(i, columns, nodes)
-	x := nodes[i].dlink
+	x := nodes[i].Dlink
 
-	// X5
 	for x != i {
 		p := x + 1
 		for p != x {
-			j := nodes[p].top
+			j := nodes[p].Top
 			if j <= 0 {
-				p = nodes[p].ulink
+				p = nodes[p].Ulink
 			} else {
 				cover(j, columns, nodes)
 				p = p + 1
@@ -116,16 +109,16 @@ func SolveExactCover(columns []Column, nodes []Node, solution []int, visitSoluti
 		// X6
 		p = x - 1
 		for p != x {
-			j := nodes[p].top
+			j := nodes[p].Top
 			if j <= 0 {
-				p = nodes[p].dlink
+				p = nodes[p].Dlink
 			} else {
 				uncover(j, columns, nodes)
 				p = p - 1
 			}
 		}
 
-		x = nodes[x].dlink
+		x = nodes[x].Dlink
 	}
 
 	// X7
@@ -150,14 +143,14 @@ func BuildDLX(options [][]int) ([]Column, []Node) {
 		}
 
 		columns[i] = Column{
-			name: name,
-			llink: (i - 1 + len(columns)) % len(columns), // Take care of negative modulo in go
-			rlink: (i + 1) % len(columns),
+			Name: name,
+			Llink: (i - 1 + len(columns)) % len(columns), // Take care of negative modulo in go
+			Rlink: (i + 1) % len(columns),
 		}
 		nodes[i] = Node{
-			top: 0,
-			ulink: i, // point to itself
-			dlink: i, // point to itself
+			Top: 0,
+			Ulink: i, // point to itself
+			Dlink: i, // point to itself
 		}
 	}
 
@@ -175,9 +168,9 @@ func BuildDLX(options [][]int) ([]Column, []Node) {
 		// Insert a Spacer node
 		elementCount := len(nodes)
 		nodes = append(nodes, Node{
-			top: -optionIndex, // negative value to indicate that it is a spacer
-			ulink: prevOptionFirstIndex, // address of the first node in the option before the spacer
-			dlink: elementCount + itemsCount, // address of the last node in the option after the spacer (ie the current option)
+			Top: -optionIndex, // negative value to indicate that it is a spacer
+			Ulink: prevOptionFirstIndex, // address of the first node in the option before the spacer
+			Dlink: elementCount + itemsCount, // address of the last node in the option after the spacer (ie the current option)
 		})
 
 		prevOptionFirstIndex = len(nodes)
@@ -185,26 +178,26 @@ func BuildDLX(options [][]int) ([]Column, []Node) {
 		for i := range(len(option)) {
 			if option[i] == 1 {
 				colindex := i + 1 // account for the root node at 0
-				ulink := nodes[colindex].ulink
+				ulink := nodes[colindex].Ulink
 
 				node := Node{
-					top: colindex,
-					ulink: ulink,
-					dlink: colindex,
+					Top: colindex,
+					Ulink: ulink,
+					Dlink: colindex,
 				}
 
 				nodes = append(nodes, node)
 
-				nodes[colindex].ulink = len(nodes) - 1
-				nodes[colindex].top += 1
-				nodes[ulink].dlink = len(nodes) - 1
+				nodes[colindex].Ulink = len(nodes) - 1
+				nodes[colindex].Top += 1
+				nodes[ulink].Dlink = len(nodes) - 1
 			}
 		}
 	}
 	nodes = append(nodes, Node{
-		top: -len(options), // negative value to indicate that it is a spacer
-		ulink: prevOptionFirstIndex, // address of the first node in the option before the spacer
-		dlink: 0, // unused
+		Top: -len(options), // negative value to indicate that it is a spacer
+		Ulink: prevOptionFirstIndex, // address of the first node in the option before the spacer
+		Dlink: 0, // unused
 	})
 
 	return columns, nodes
