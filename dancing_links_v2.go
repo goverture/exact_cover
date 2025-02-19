@@ -2,7 +2,6 @@ package goverture
 
 import "strconv"
 
-
 type Node struct {
 	Top   int
 	Ulink int
@@ -10,7 +9,7 @@ type Node struct {
 }
 
 type Column struct {
-	Name string
+	Name  string
 	Llink int
 	Rlink int
 }
@@ -130,11 +129,11 @@ func BuildDLX(options [][]int) ([]Column, []Node) {
 		return []Column{}, []Node{}
 	}
 
-	columns := make([]Column, 1 + len(options[0]))
-	nodes := make([]Node, 1 + len(options[0]))
+	columns := make([]Column, 1+len(options[0]))
+	nodes := make([]Node, 1+len(options[0]))
 
 	// Build the columns (horizontally linked)
-	for i := range(columns) {
+	for i := range columns {
 		var name string
 		if i == 0 {
 			name = "root"
@@ -143,23 +142,23 @@ func BuildDLX(options [][]int) ([]Column, []Node) {
 		}
 
 		columns[i] = Column{
-			Name: name,
+			Name:  name,
 			Llink: (i - 1 + len(columns)) % len(columns), // Take care of negative modulo in go
 			Rlink: (i + 1) % len(columns),
 		}
 		nodes[i] = Node{
-			Top: 0,
+			Top:   0,
 			Ulink: i, // point to itself
 			Dlink: i, // point to itself
 		}
 	}
 
 	var prevOptionFirstIndex int
-	
-	for optionIndex, option := range(options) {
+
+	for optionIndex, option := range options {
 		// Count how many items are in the option
 		itemsCount := 0
-		for _, i := range(option) {
+		for _, i := range option {
 			if i == 1 {
 				itemsCount++
 			}
@@ -168,20 +167,20 @@ func BuildDLX(options [][]int) ([]Column, []Node) {
 		// Insert a Spacer node
 		elementCount := len(nodes)
 		nodes = append(nodes, Node{
-			Top: -optionIndex, // negative value to indicate that it is a spacer
-			Ulink: prevOptionFirstIndex, // address of the first node in the option before the spacer
+			Top:   -optionIndex,              // negative value to indicate that it is a spacer
+			Ulink: prevOptionFirstIndex,      // address of the first node in the option before the spacer
 			Dlink: elementCount + itemsCount, // address of the last node in the option after the spacer (ie the current option)
 		})
 
 		prevOptionFirstIndex = len(nodes)
 
-		for i := range(len(option)) {
+		for i := range len(option) {
 			if option[i] == 1 {
 				colindex := i + 1 // account for the root node at 0
 				ulink := nodes[colindex].Ulink
 
 				node := Node{
-					Top: colindex,
+					Top:   colindex,
 					Ulink: ulink,
 					Dlink: colindex,
 				}
@@ -195,9 +194,9 @@ func BuildDLX(options [][]int) ([]Column, []Node) {
 		}
 	}
 	nodes = append(nodes, Node{
-		Top: -len(options), // negative value to indicate that it is a spacer
+		Top:   -len(options),        // negative value to indicate that it is a spacer
 		Ulink: prevOptionFirstIndex, // address of the first node in the option before the spacer
-		Dlink: 0, // unused
+		Dlink: 0,                    // unused
 	})
 
 	return columns, nodes

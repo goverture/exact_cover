@@ -184,7 +184,6 @@ func TestNQueensSolver_ComplexityEstimate(t *testing.T) {
 	// 	// Generate the exact cover matrix and choiceToCell mapping for the current N
 	// 	choices, secondaryColumns := generateChoices(tc.N)
 
-
 	// 	// Check if the estimated complexity matches the expected value
 	// 	if estimatedComplexity != tc.ExpectedComplexity {
 	// 		t.Errorf("For N=%d, expected complexity %.0f, got %.0f", tc.N, tc.ExpectedComplexity, estimatedComplexity)

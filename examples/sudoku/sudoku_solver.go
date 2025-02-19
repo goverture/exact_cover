@@ -99,7 +99,7 @@ func main() {
 	columns, nodes := goverture.BuildDLX(choices)
 	visitor := func(solution []int) {
 		optionIndex := make([]int, len(solution))
-		for i, x := range(solution) {
+		for i, x := range solution {
 			for nodes[x].Top > 0 {
 				x = x - 1
 			}
