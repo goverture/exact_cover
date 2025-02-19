@@ -78,6 +78,21 @@ func uncover(i int, columns []Column, nodes []Node) {
 	}
 }
 
+// selectMinColumn finds the column (header) with the smallest node count.
+func selectMinColumn(columns []Column, nodes []Node) int {
+    // Start with the first column right of root.
+    best := columns[0].Rlink
+    minCount := nodes[best].Top
+    // Iterate through all columns until we circle back to the root (index 0).
+    for j := columns[best].Rlink; j != 0; j = columns[j].Rlink {
+        if nodes[j].Top < minCount {
+            best = j
+            minCount = nodes[j].Top
+        }
+    }
+    return best
+}
+
 // Implementation of the Algorithm X ("Exact cover via dancing links") from Knuth's paper
 func SolveExactCover(columns []Column, nodes []Node, solution []int, visitSolution func([]int)) {
 	if columns[0].Rlink == 0 {
@@ -85,7 +100,7 @@ func SolveExactCover(columns []Column, nodes []Node, solution []int, visitSoluti
 		return
 	}
 
-	i := columns[0].Rlink
+	i := selectMinColumn(columns, nodes)
 	cover(i, columns, nodes)
 	x := nodes[i].Dlink
 

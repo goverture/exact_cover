@@ -2,6 +2,9 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"os"
+	"runtime/pprof"
 
 	goverture "github.com/goverture/exact_cover"
 )
@@ -36,6 +39,18 @@ func printGrid(grid [Size][Size]int) {
 }
 
 func main() {
+	// profile
+	if os.Getenv("ENABLE_CPU_PROFILING") == "true" {
+		f, err := os.Create("cpu.prof")
+		if err != nil {
+			log.Println("Failed to create CPU profile:", err)
+			return
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
+
+
 	fmt.Println("Initial Sudoku Grid:")
 	var testGrid = [Size][Size]int{
 		{5, 3, 0, 0, 7, 0, 0, 0, 0},
