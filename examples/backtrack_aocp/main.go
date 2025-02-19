@@ -82,14 +82,12 @@ func uncover(i int, columns []Column, nodes []Node) {
 }
 
 // Implementation of the Algorithm X ("Exact cover via dancing links") from Knuth's paper
-func solveExactCover(columns []Column, nodes []Node, solution []int) {
+func solveExactCover(columns []Column, nodes []Node, solution []int, visitSolution func([]int)) {
 	// l := 0 // level
 
 	// X2
 	if(columns[0].rlink == 0) {
-		// all items have been covered
-		fmt.Println("Solution found")
-		fmt.Println(solution)
+		visitSolution(solution)
 		return
 	}
 
@@ -114,7 +112,7 @@ func solveExactCover(columns []Column, nodes []Node, solution []int) {
 		}
 
 		solution = append(solution, x)
-		solveExactCover(columns, nodes, solution)
+		solveExactCover(columns, nodes, solution, visitSolution)
 		solution = solution[:len(solution)-1]
 
 		// X6
@@ -136,10 +134,15 @@ func solveExactCover(columns []Column, nodes []Node, solution []int) {
 	uncover(i, columns, nodes)
 }
 
-func main() {
-	columns := make([]Column, 1 + 7)
-	nodes := make([]Node, 1 + 7)
+func buildDLX(options [][]int) ([]Column, []Node) {
+	if len(options) == 0 {
+		return []Column{}, []Node{}
+	}
 
+	columns := make([]Column, 1 + len(options[0]))
+	nodes := make([]Node, 1 + len(options[0]))
+
+	// Build the columns (horizontally linked)
 	for i := range(columns) {
 		var name string
 		if i == 0 {
@@ -158,15 +161,6 @@ func main() {
 			ulink: i, // point to itself
 			dlink: i, // point to itself
 		}
-	}
-
-	options := [6][7]int{
-		{0,0,1,0,1,0,0},
-		{1,0,0,1,0,0,1},
-		{0,1,1,0,0,1,0},
-		{1,0,0,1,0,1,0},
-		{0,1,0,0,0,0,1},
-		{0,0,0,1,1,0,1},
 	}
 
 	var prevOptionFirstIndex int
@@ -209,16 +203,43 @@ func main() {
 			}
 		}
 	}
-	// TODO: Add a spacer node at the end of the list
 	nodes = append(nodes, Node{
 		top: -len(options), // negative value to indicate that it is a spacer
 		ulink: prevOptionFirstIndex, // address of the first node in the option before the spacer
 		dlink: 0, // unused
 	})
 
+	return columns, nodes
+}
+
+func main() {
+	options := [][]int{
+		{0,0,1,0,1,0,0},
+		{1,0,0,1,0,0,1},
+		{0,1,1,0,0,1,0},
+		{1,0,0,1,0,1,0},
+		{0,1,0,0,0,0,1},
+		{0,0,0,1,1,0,1},
+	}
+
+	columns, nodes := buildDLX(options)
+
+	visitor := func(solution []int) {
+		optionIndex := make([]int, len(solution))
+		for i, x := range(solution) {
+			for nodes[x].top > 0 {
+				x = x - 1
+			}
+			optionIndex[i] = -nodes[x].top
+		}
+		fmt.Println("Solution found : ")
+		for _, i := range(optionIndex) {
+			fmt.Printf("%d ", options[i])
+		}
+	}
+
 	solution := []int{}
-	solveExactCover(columns, nodes, solution)
+	solveExactCover(columns, nodes, solution, visitor)
 
 	fmt.Println("Done")
-
 }
