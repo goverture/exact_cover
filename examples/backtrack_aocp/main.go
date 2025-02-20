@@ -214,12 +214,15 @@ func buildDLX(options [][]int) ([]Column, []Node) {
 
 func main() {
 	options := [][]int{
+		{0, 0, 0, 1, 1, 1, 1},
 		{0, 0, 1, 0, 1, 0, 0},
 		{1, 0, 0, 1, 0, 0, 1},
 		{0, 1, 1, 0, 0, 1, 0},
 		{1, 0, 0, 1, 0, 1, 0},
 		{0, 1, 0, 0, 0, 0, 1},
 		{0, 0, 0, 1, 1, 0, 1},
+		{1, 1, 1, 1, 1, 1, 1},
+		{1, 1, 1, 0 ,0 ,0, 0 },
 	}
 
 	columns, nodes := buildDLX(options)
@@ -234,7 +237,7 @@ func main() {
 		}
 		fmt.Println("Solution found : ")
 		for _, i := range optionIndex {
-			fmt.Printf("%d ", options[i])
+			fmt.Printf("%d \n", options[i])
 		}
 	}
 

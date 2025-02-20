@@ -139,7 +139,7 @@ func SolveExactCover(columns []Column, nodes []Node, solution []int, visitSoluti
 	uncover(i, columns, nodes)
 }
 
-func BuildDLX(options [][]int) ([]Column, []Node) {
+func BuildDLX(options [][]int, isSecondaryColumn func(int) bool) ([]Column, []Node) {
 	if len(options) == 0 {
 		return []Column{}, []Node{}
 	}
@@ -148,25 +148,42 @@ func BuildDLX(options [][]int) ([]Column, []Node) {
 	nodes := make([]Node, 1+len(options[0]))
 
 	// Build the columns (horizontally linked)
-	for i := range columns {
-		var name string
-		if i == 0 {
-			name = "root"
-		} else {
-			name = "C" + strconv.Itoa(i)
-		}
+	columns[0] = Column{
+		Name:  "root",
+		Llink: 0,
+		Rlink: 0,
+	}
+	nodes[0] = Node{
+		Top:   0,
+		Ulink: 0,
+		Dlink: 0,
+	}
+
+	previousPrimaryColumnIndex := 0
+	for i := 1; i < len(columns); i++ {
+		name := "C" + strconv.Itoa(i)
 
 		columns[i] = Column{
 			Name:  name,
-			Llink: (i - 1 + len(columns)) % len(columns), // Take care of negative modulo in go
-			Rlink: (i + 1) % len(columns),
+			Llink: i,
+			Rlink: i, // Secundary columns are not linked
 		}
+		// We don't link secondary columns
+		if !isSecondaryColumn(i-1) {
+			columns[i].Llink = previousPrimaryColumnIndex
+			columns[previousPrimaryColumnIndex].Rlink = i
+
+			previousPrimaryColumnIndex = i
+			columns[i].Rlink = 0 // point to root
+		}
+
 		nodes[i] = Node{
 			Top:   0,
 			Ulink: i, // point to itself
 			Dlink: i, // point to itself
 		}
 	}
+	columns[0].Llink = previousPrimaryColumnIndex
 
 	var prevOptionFirstIndex int
 
@@ -189,7 +206,7 @@ func BuildDLX(options [][]int) ([]Column, []Node) {
 
 		prevOptionFirstIndex = len(nodes)
 
-		for i := range len(option) {
+		for i := 0; i < len(option); i++ {
 			if option[i] == 1 {
 				colindex := i + 1 // account for the root node at 0
 				ulink := nodes[colindex].Ulink

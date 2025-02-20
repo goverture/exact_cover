@@ -111,7 +111,11 @@ func main() {
 		}
 	}
 
-	columns, nodes := goverture.BuildDLX(choices)
+	isSecondaryColumn := func(int) bool {
+		return false
+	}
+
+	columns, nodes := goverture.BuildDLX(choices, isSecondaryColumn)
 	visitor := func(solution []int) {
 		optionIndex := make([]int, len(solution))
 		for i, x := range solution {

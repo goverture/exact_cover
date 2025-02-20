@@ -2,9 +2,9 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"runtime/pprof"
 	"time"
@@ -93,9 +93,16 @@ func generateChoices(testN int) ([][]int, map[int]bool) {
 
 // go build -ldflags="-s -w" -o queens
 func main() {
-	f, _ := os.Create("cpu.prof")
-	pprof.StartCPUProfile(f)
-	defer pprof.StopCPUProfile()
+	// profile
+	if os.Getenv("ENABLE_CPU_PROFILING") == "true" {
+		f, err := os.Create("cpu.prof")
+		if err != nil {
+			log.Println("Failed to create CPU profile:", err)
+			return
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
 
 	// Define a flag to read the size of the chessboard from command line arguments
 	size := flag.Int("size", 8, "Size of the chessboard (N x N)")
@@ -106,8 +113,6 @@ func main() {
 	// Generate the exact cover matrix and choiceToCell mapping
 	choices, secondaryColumns := generateChoices(*size)
 
-	sparseMatrix := goverture.SparseMatrixFromArray(choices)
-
 	// Start timer
 	start := time.Now()
 
@@ -117,14 +122,14 @@ func main() {
 		return exists && ok
 	}
 
-	solutionsChan := goverture.SolveDLXWithSecondary(context.Background(), sparseMatrix, isSecondaryColumn, -1*time.Second)
+	columns, nodes := goverture.BuildDLX(choices, isSecondaryColumn)
 
-	// Collect all solutions into a slice
 	solCount := 0
-	for sol := range solutionsChan {
-		_ = sol
+	visitor := func(solution []int) {
 		solCount++
 	}
+
+	goverture.SolveExactCover(columns, nodes, []int{}, visitor)
 
 	// Stop timer and calculate duration
 	duration := time.Since(start)
