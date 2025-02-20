@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -148,5 +149,5 @@ func main() {
 		fmt.Println("--------")
 	}
 
-	goverture.SolveExactCover(columns, nodes, []int{}, visitor)
+	goverture.SolveExactCover(context.Background(), columns, nodes, []int{}, visitor)
 }

@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -129,7 +130,7 @@ func main() {
 		solCount++
 	}
 
-	goverture.SolveExactCover(columns, nodes, []int{}, visitor)
+	goverture.SolveExactCover(context.Background(), columns, nodes, []int{}, visitor)
 
 	// Stop timer and calculate duration
 	duration := time.Since(start)

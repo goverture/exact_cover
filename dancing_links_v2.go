@@ -1,6 +1,9 @@
 package goverture
 
-import "strconv"
+import (
+	"context"
+	"strconv"
+)
 
 type Node struct {
 	Top   int
@@ -89,18 +92,33 @@ func selectMinColumn(columns []Column, nodes []Node) int {
             best = j
             minCount = nodes[j].Top
         }
+
+		if minCount == 0 {
+          return best
+		}
     }
     return best
 }
 
 // Implementation of the Algorithm X ("Exact cover via dancing links") from Knuth's paper
-func SolveExactCover(columns []Column, nodes []Node, solution []int, visitSolution func([]int)) {
+func SolveExactCover(ctx context.Context, columns []Column, nodes []Node, solution []int, visitSolution func([]int)) error {
+	select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+	}
+
 	if columns[0].Rlink == 0 {
 		visitSolution(solution)
-		return
+		return nil
 	}
 
 	i := selectMinColumn(columns, nodes)
+	if nodes[i].Top == 0 {
+		// No solutions
+		return nil
+	}
+
 	cover(i, columns, nodes)
 	x := nodes[i].Dlink
 
@@ -117,7 +135,7 @@ func SolveExactCover(columns []Column, nodes []Node, solution []int, visitSoluti
 		}
 
 		solution = append(solution, x)
-		SolveExactCover(columns, nodes, solution, visitSolution)
+		SolveExactCover(ctx, columns, nodes, solution, visitSolution)
 		solution = solution[:len(solution)-1]
 
 		// X6
@@ -137,6 +155,8 @@ func SolveExactCover(columns []Column, nodes []Node, solution []int, visitSoluti
 
 	// X7
 	uncover(i, columns, nodes)
+
+	return nil
 }
 
 func BuildDLX(options [][]int, isSecondaryColumn func(int) bool) ([]Column, []Node) {
