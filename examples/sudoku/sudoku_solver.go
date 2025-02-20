@@ -70,53 +70,58 @@ func main() {
 	// Generate the constraints for the empty Sudoku grid
 	// We have 729 possible choices (9x9x9) for each cell
 	// and 324 constraints (9*9 for each cell, row, column and block)
-	choices := make([][]int, 0)
+	choices := make(chan []int)
 	var choiceToCell []Choice // Mapping from choice index to (Row, Col, Num)
+	columnCount := 4 * Size * Size
 
-	for row := 0; row < 9; row++ {
-		for col := 0; col < 9; col++ {
-			for num := 1; num <= 9; num++ {
-				if testGrid[row][col] != 0 && testGrid[row][col] != num {
-					// the grid is constrained here
-					continue
+	go func() {
+		defer close(choices)
+
+		for row := 0; row < 9; row++ {
+			for col := 0; col < 9; col++ {
+				for num := 1; num <= 9; num++ {
+					if testGrid[row][col] != 0 && testGrid[row][col] != num {
+						// the grid is constrained here
+						continue
+					}
+
+					choice := make([]int, 4*Size*Size) // it's initialized to 0
+
+					// set the cell constraint
+					cell_index := row*Size + col
+					choice[cell_index] = 1
+
+					// set the row contraint (ie there is a 'n' in the ith row)
+					row_index := 81 + row*Size + (num - 1)
+					choice[row_index] = 1
+
+					// set the column contraint (ie there is a 'n' in the jth column)
+					col_index := 162 + col*Size + (num - 1)
+					choice[col_index] = 1
+
+					// set the block constraint (ie there is a 'n' in the kth block)
+					block_num := (row/3)*3 + (col / 3)
+					block_index := 243 + block_num*Size + (num - 1)
+					choice[block_index] = 1
+
+					choices <- choice
+
+					// Map this choice to its corresponding cell and number
+					choiceToCell = append(choiceToCell, Choice{
+						Row: row,
+						Col: col,
+						Num: num,
+					})
 				}
-
-				choice := make([]int, 4*Size*Size) // it's initialized to 0
-
-				// set the cell constraint
-				cell_index := row*Size + col
-				choice[cell_index] = 1
-
-				// set the row contraint (ie there is a 'n' in the ith row)
-				row_index := 81 + row*Size + (num - 1)
-				choice[row_index] = 1
-
-				// set the column contraint (ie there is a 'n' in the jth column)
-				col_index := 162 + col*Size + (num - 1)
-				choice[col_index] = 1
-
-				// set the block constraint (ie there is a 'n' in the kth block)
-				block_num := (row/3)*3 + (col / 3)
-				block_index := 243 + block_num*Size + (num - 1)
-				choice[block_index] = 1
-
-				choices = append(choices, choice)
-
-				// Map this choice to its corresponding cell and number
-				choiceToCell = append(choiceToCell, Choice{
-					Row: row,
-					Col: col,
-					Num: num,
-				})
 			}
 		}
-	}
+	}()
 
 	isSecondaryColumn := func(int) bool {
 		return false
 	}
 
-	columns, nodes := goverture.BuildDLX(choices, isSecondaryColumn)
+	columns, nodes := goverture.BuildDLX(columnCount, choices, isSecondaryColumn)
 	visitor := func(solution []int) {
 		optionIndex := make([]int, len(solution))
 		for i, x := range solution {

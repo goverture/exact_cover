@@ -159,13 +159,13 @@ func SolveExactCover(ctx context.Context, columns []Column, nodes []Node, soluti
 	return nil
 }
 
-func BuildDLX(options [][]int, isSecondaryColumn func(int) bool) ([]Column, []Node) {
-	if len(options) == 0 {
+func BuildDLX(itemsCount int, options <-chan []int, isSecondaryColumn func(int) bool) ([]Column, []Node) {
+	if itemsCount == 0 {
 		return []Column{}, []Node{}
 	}
 
-	columns := make([]Column, 1+len(options[0]))
-	nodes := make([]Node, 1+len(options[0]))
+	columns := make([]Column, 1+itemsCount) // +1 for root
+	nodes := make([]Node, 1+itemsCount) // +1 for root
 
 	// Build the columns (horizontally linked)
 	columns[0] = Column{
@@ -206,8 +206,8 @@ func BuildDLX(options [][]int, isSecondaryColumn func(int) bool) ([]Column, []No
 	columns[0].Llink = previousPrimaryColumnIndex
 
 	var prevOptionFirstIndex int
-
-	for optionIndex, option := range options {
+	optionIndex := 0
+	for option := range options {
 		// Count how many items are in the option
 		itemsCount := 0
 		for _, i := range option {
@@ -244,6 +244,8 @@ func BuildDLX(options [][]int, isSecondaryColumn func(int) bool) ([]Column, []No
 				nodes[ulink].Dlink = len(nodes) - 1
 			}
 		}
+
+		optionIndex++
 	}
 	nodes = append(nodes, Node{
 		Top:   -len(options),        // negative value to indicate that it is a spacer

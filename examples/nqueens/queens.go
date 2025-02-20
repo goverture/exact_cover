@@ -51,9 +51,9 @@ func reconstructBoard(N int, solution []int, choices [][]int, choiceToCell []Cho
 	return board, nil
 }
 
-func generateChoices(testN int) ([][]int, map[int]bool) {
+func generateChoices(testN int) (int, <-chan []int, map[int]bool) {
 	// Generate the exact cover matrix and choiceToCell mapping for NTest
-	choices := make([][]int, 0)
+	choices := make(chan []int)
 
 	// Total constraints:
 	// Rows: 0 to NTest-1
@@ -67,29 +67,34 @@ func generateChoices(testN int) ([][]int, map[int]bool) {
 		secondaryColumns[i] = i >= 2*testN
 	}
 
-	for row := 0; row < testN; row++ {
-		for col := 0; col < testN; col++ {
-			choice := make([]int, totalConstraints) // Initialize all to 0
+	go func() {
+		defer close(choices)
 
-			// Row constraint
-			choice[row] = 1
+		for row := 0; row < testN; row++ {
 
-			// Column constraint
-			choice[testN+col] = 1
+			for col := 0; col < testN; col++ {
+				choice := make([]int, totalConstraints) // Initialize all to 0
 
-			// Major Diagonal constraint
-			majorDiag := 2*testN + (row - col + testN - 1)
-			choice[majorDiag] = 1
+				// Row constraint
+				choice[row] = 1
 
-			// Minor Diagonal constraint
-			minorDiag := 4*testN - 1 + (row + col)
-			choice[minorDiag] = 1
+				// Column constraint
+				choice[testN+col] = 1
 
-			choices = append(choices, choice)
+				// Major Diagonal constraint
+				majorDiag := 2*testN + (row - col + testN - 1)
+				choice[majorDiag] = 1
+
+				// Minor Diagonal constraint
+				minorDiag := 4*testN - 1 + (row + col)
+				choice[minorDiag] = 1
+
+				choices <- choice
+			}
 		}
-	}
+	}()
 
-	return choices, secondaryColumns
+	return totalConstraints, choices, secondaryColumns
 }
 
 // go build -ldflags="-s -w" -o queens
@@ -112,7 +117,7 @@ func main() {
 	fmt.Printf("Solving the %d-Queens Problem:\n", *size)
 
 	// Generate the exact cover matrix and choiceToCell mapping
-	choices, secondaryColumns := generateChoices(*size)
+	columnCount, choices, secondaryColumns := generateChoices(*size)
 
 	// Start timer
 	start := time.Now()
@@ -123,7 +128,7 @@ func main() {
 		return exists && ok
 	}
 
-	columns, nodes := goverture.BuildDLX(choices, isSecondaryColumn)
+	columns, nodes := goverture.BuildDLX(columnCount, choices, isSecondaryColumn)
 
 	solCount := 0
 	visitor := func(solution []int) {
