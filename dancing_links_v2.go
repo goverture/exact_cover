@@ -159,7 +159,7 @@ func SolveExactCover(ctx context.Context, columns []Column, nodes []Node, soluti
 	return nil
 }
 
-func BuildDLX(itemsCount int, options <-chan []int, isSecondaryColumn func(int) bool) ([]Column, []Node) {
+func BuildDLX(itemsCount int, options <-chan SparseRow, isSecondaryColumn func(int) bool) ([]Column, []Node) {
 	if itemsCount == 0 {
 		return []Column{}, []Node{}
 	}
@@ -209,12 +209,7 @@ func BuildDLX(itemsCount int, options <-chan []int, isSecondaryColumn func(int) 
 	optionIndex := 0
 	for option := range options {
 		// Count how many items are in the option
-		itemsCount := 0
-		for _, i := range option {
-			if i == 1 {
-				itemsCount++
-			}
-		}
+		itemsCount := len(option)
 
 		// Insert a Spacer node
 		elementCount := len(nodes)
@@ -226,23 +221,21 @@ func BuildDLX(itemsCount int, options <-chan []int, isSecondaryColumn func(int) 
 
 		prevOptionFirstIndex = len(nodes)
 
-		for i := 0; i < len(option); i++ {
-			if option[i] == 1 {
-				colindex := i + 1 // account for the root node at 0
-				ulink := nodes[colindex].Ulink
+		for i := range option {
+			colindex := i + 1 // account for the root node at 0
+			ulink := nodes[colindex].Ulink
 
-				node := Node{
-					Top:   colindex,
-					Ulink: ulink,
-					Dlink: colindex,
-				}
-
-				nodes = append(nodes, node)
-
-				nodes[colindex].Ulink = len(nodes) - 1
-				nodes[colindex].Top += 1
-				nodes[ulink].Dlink = len(nodes) - 1
+			node := Node{
+				Top:   colindex,
+				Ulink: ulink,
+				Dlink: colindex,
 			}
+
+			nodes = append(nodes, node)
+
+			nodes[colindex].Ulink = len(nodes) - 1
+			nodes[colindex].Top += 1
+			nodes[ulink].Dlink = len(nodes) - 1
 		}
 
 		optionIndex++

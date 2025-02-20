@@ -51,9 +51,9 @@ func reconstructBoard(N int, solution []int, choices [][]int, choiceToCell []Cho
 	return board, nil
 }
 
-func generateChoices(testN int) (int, <-chan []int, map[int]bool) {
+func generateChoices(testN int) (int, <-chan goverture.SparseRow, map[int]bool) {
 	// Generate the exact cover matrix and choiceToCell mapping for NTest
-	choices := make(chan []int)
+	choices := make(chan goverture.SparseRow, 50)
 
 	// Total constraints:
 	// Rows: 0 to NTest-1
@@ -73,7 +73,7 @@ func generateChoices(testN int) (int, <-chan []int, map[int]bool) {
 		for row := 0; row < testN; row++ {
 
 			for col := 0; col < testN; col++ {
-				choice := make([]int, totalConstraints) // Initialize all to 0
+				choice := make(goverture.SparseRow, 4)
 
 				// Row constraint
 				choice[row] = 1
