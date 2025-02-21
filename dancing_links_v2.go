@@ -116,27 +116,36 @@ func SolveExactCover(
 		return ctx.Err()
 	case <-ticker:
 		if len(solution) > 0 {
-			optionIndex := make([]int, len(solution))
-			for i, x := range solution {
+			solutionCopy := make([]AppInt, len(solution))
+			copy(solutionCopy, solution) 
+	
+			go func() {
+				optionIndex := make([]int, len(solutionCopy))
+				for i, x := range solutionCopy {
+					for nodes[x].Top > 0 {
+						x = x - 1
+					}
+					optionIndex[i] = -int(nodes[x].Top)
+				}
+				solutions <- optionIndex
+			}()
+		}
+	default:
+	}
+
+	if columns[0].Rlink == 0 {
+		solutionCopy := make([]AppInt, len(solution))
+		copy(solutionCopy, solution) 
+		go func() {
+			optionIndex := make([]int, len(solutionCopy))
+			for i, x := range solutionCopy {
 				for nodes[x].Top > 0 {
 					x = x - 1
 				}
 				optionIndex[i] = -int(nodes[x].Top)
 			}
 			solutions <- optionIndex
-		}
-	default:
-	}
-
-	if columns[0].Rlink == 0 {
-		optionIndex := make([]int, len(solution))
-		for i, x := range solution {
-			for nodes[x].Top > 0 {
-				x = x - 1
-			}
-			optionIndex[i] = -int(nodes[x].Top)
-		}
-		solutions <- optionIndex
+		}()
 
 		return nil
 	}
@@ -163,7 +172,9 @@ func SolveExactCover(
 		}
 
 		solution = append(solution, x)
-		SolveExactCover(ctx, columns, nodes, solution, solutions, ticker)
+		if err := SolveExactCover(ctx, columns, nodes, solution, solutions, ticker); err != nil {
+			return err
+		}
 		solution = solution[:len(solution)-1]
 
 		// X6
