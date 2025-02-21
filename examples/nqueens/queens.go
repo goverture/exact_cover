@@ -131,11 +131,11 @@ func main() {
 	columns, nodes := goverture.BuildDLX(columnCount, choices, isSecondaryColumn)
 
 	solCount := 0
-	visitor := func(solution []int) {
+	visitor := func(solution []goverture.AppInt) {
 		solCount++
 	}
 
-	goverture.SolveExactCover(context.Background(), columns, nodes, []int{}, visitor)
+	goverture.SolveExactCover(context.Background(), columns, nodes, []goverture.AppInt{}, visitor)
 
 	// Stop timer and calculate duration
 	duration := time.Since(start)

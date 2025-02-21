@@ -51,7 +51,6 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-
 	fmt.Println("Initial Sudoku Grid:")
 	var testGrid = [Size][Size]int{
 		{5, 3, 0, 0, 7, 0, 0, 0, 0},
@@ -70,7 +69,7 @@ func main() {
 	// Generate the constraints for the empty Sudoku grid
 	// We have 729 possible choices (9x9x9) for each cell
 	// and 324 constraints (9*9 for each cell, row, column and block)
-	choices := make(chan []int)
+	choices := make(chan goverture.SparseRow)
 	var choiceToCell []Choice // Mapping from choice index to (Row, Col, Num)
 	columnCount := 4 * Size * Size
 
@@ -85,7 +84,7 @@ func main() {
 						continue
 					}
 
-					choice := make([]int, 4*Size*Size) // it's initialized to 0
+					choice := make(goverture.SparseRow) // it's initialized to 0
 
 					// set the cell constraint
 					cell_index := row*Size + col
@@ -122,13 +121,13 @@ func main() {
 	}
 
 	columns, nodes := goverture.BuildDLX(columnCount, choices, isSecondaryColumn)
-	visitor := func(solution []int) {
+	visitor := func(solution []goverture.AppInt) {
 		optionIndex := make([]int, len(solution))
 		for i, x := range solution {
 			for nodes[x].Top > 0 {
 				x = x - 1
 			}
-			optionIndex[i] = -nodes[x].Top
+			optionIndex[i] = -int(nodes[x].Top)
 		}
 		fmt.Println("Solution found : ")
 
@@ -154,5 +153,5 @@ func main() {
 		fmt.Println("--------")
 	}
 
-	goverture.SolveExactCover(context.Background(), columns, nodes, []int{}, visitor)
+	goverture.SolveExactCover(context.Background(), columns, nodes, []goverture.AppInt{}, visitor)
 }

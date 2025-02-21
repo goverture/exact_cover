@@ -5,20 +5,23 @@ import (
 	"strconv"
 )
 
+// AppInt is the base integer type used throughout the application
+type AppInt int32
+
 type Node struct {
-	Top   int
-	Ulink int
-	Dlink int
+	Top   AppInt
+	Ulink AppInt
+	Dlink AppInt
 }
 
 type Column struct {
 	Name  string
-	Llink int
-	Rlink int
+	Llink AppInt
+	Rlink AppInt
 }
 
 // Hide an option
-func hide(p int, nodes []Node) {
+func hide(p AppInt, nodes []Node) {
 	q := p + 1
 	for q != p {
 		x := nodes[q].Top
@@ -36,7 +39,7 @@ func hide(p int, nodes []Node) {
 }
 
 // Unhide an option
-func unhide(p int, nodes []Node) {
+func unhide(p AppInt, nodes []Node) {
 	q := p - 1
 	for q != p {
 		x := nodes[q].Top
@@ -54,7 +57,7 @@ func unhide(p int, nodes []Node) {
 }
 
 // Cover an item
-func cover(i int, columns []Column, nodes []Node) {
+func cover(i AppInt, columns []Column, nodes []Node) {
 	p := nodes[i].Dlink
 	for p != i {
 		hide(p, nodes)
@@ -68,7 +71,7 @@ func cover(i int, columns []Column, nodes []Node) {
 }
 
 // Uncover an item
-func uncover(i int, columns []Column, nodes []Node) {
+func uncover(i AppInt, columns []Column, nodes []Node) {
 	l := columns[i].Llink
 	r := columns[i].Rlink
 	columns[l].Rlink = i
@@ -82,30 +85,28 @@ func uncover(i int, columns []Column, nodes []Node) {
 }
 
 // selectMinColumn finds the column (header) with the smallest node count.
-func selectMinColumn(columns []Column, nodes []Node) int {
-    // Start with the first column right of root.
-    best := columns[0].Rlink
-    minCount := nodes[best].Top
-    // Iterate through all columns until we circle back to the root (index 0).
-    for j := columns[best].Rlink; j != 0; j = columns[j].Rlink {
-        if nodes[j].Top < minCount {
-            best = j
-            minCount = nodes[j].Top
-        }
+func selectMinColumn(columns []Column, nodes []Node) AppInt {
+	best := columns[0].Rlink
+	minCount := nodes[best].Top
+	for j := columns[best].Rlink; j != 0; j = columns[j].Rlink {
+		if nodes[j].Top < minCount {
+			best = j
+			minCount = nodes[j].Top
+		}
 
 		if minCount == 0 {
-          return best
+			return best
 		}
-    }
-    return best
+	}
+	return best
 }
 
 // Implementation of the Algorithm X ("Exact cover via dancing links") from Knuth's paper
-func SolveExactCover(ctx context.Context, columns []Column, nodes []Node, solution []int, visitSolution func([]int)) error {
+func SolveExactCover(ctx context.Context, columns []Column, nodes []Node, solution []AppInt, visitSolution func([]AppInt)) error {
 	select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
 	}
 
 	if columns[0].Rlink == 0 {
@@ -165,7 +166,7 @@ func BuildDLX(itemsCount int, options <-chan SparseRow, isSecondaryColumn func(i
 	}
 
 	columns := make([]Column, 1+itemsCount) // +1 for root
-	nodes := make([]Node, 1+itemsCount) // +1 for root
+	nodes := make([]Node, 1+itemsCount)     // +1 for root
 
 	// Build the columns (horizontally linked)
 	columns[0] = Column{
@@ -179,50 +180,49 @@ func BuildDLX(itemsCount int, options <-chan SparseRow, isSecondaryColumn func(i
 		Dlink: 0,
 	}
 
-	previousPrimaryColumnIndex := 0
+	previousPrimaryColumnIndex := AppInt(0)
 	for i := 1; i < len(columns); i++ {
 		name := "C" + strconv.Itoa(i)
 
 		columns[i] = Column{
 			Name:  name,
-			Llink: i,
-			Rlink: i, // Secundary columns are not linked
+			Llink: AppInt(i),
+			Rlink: AppInt(i), // Secondary columns are not linked
 		}
 		// We don't link secondary columns
-		if !isSecondaryColumn(i-1) {
+		if !isSecondaryColumn(i - 1) {
 			columns[i].Llink = previousPrimaryColumnIndex
-			columns[previousPrimaryColumnIndex].Rlink = i
+			columns[previousPrimaryColumnIndex].Rlink = AppInt(i)
 
-			previousPrimaryColumnIndex = i
+			previousPrimaryColumnIndex = AppInt(i)
 			columns[i].Rlink = 0 // point to root
 		}
 
 		nodes[i] = Node{
 			Top:   0,
-			Ulink: i, // point to itself
-			Dlink: i, // point to itself
+			Ulink: AppInt(i), // point to itself
+			Dlink: AppInt(i), // point to itself
 		}
 	}
 	columns[0].Llink = previousPrimaryColumnIndex
 
-	var prevOptionFirstIndex int
+	var prevOptionFirstIndex AppInt
 	optionIndex := 0
 	for option := range options {
-		// Count how many items are in the option
 		itemsCount := len(option)
+		elementCount := len(nodes)
 
 		// Insert a Spacer node
-		elementCount := len(nodes)
 		nodes = append(nodes, Node{
-			Top:   -optionIndex,              // negative value to indicate that it is a spacer
-			Ulink: prevOptionFirstIndex,      // address of the first node in the option before the spacer
-			Dlink: elementCount + itemsCount, // address of the last node in the option after the spacer (ie the current option)
+			Top:   AppInt(-optionIndex),              // negative value to indicate that it is a spacer
+			Ulink: prevOptionFirstIndex,              // address of the first node in the option before the spacer
+			Dlink: AppInt(elementCount + itemsCount), // address of the last node in the option after the spacer
 		})
 
-		prevOptionFirstIndex = len(nodes)
+		prevOptionFirstIndex = AppInt(len(nodes))
 
 		for i := range option {
-			colindex := i + 1 // account for the root node at 0
+			colindex := AppInt(i + 1) // account for the root node at 0
 			ulink := nodes[colindex].Ulink
 
 			node := Node{
@@ -233,17 +233,17 @@ func BuildDLX(itemsCount int, options <-chan SparseRow, isSecondaryColumn func(i
 
 			nodes = append(nodes, node)
 
-			nodes[colindex].Ulink = len(nodes) - 1
+			nodes[colindex].Ulink = AppInt(len(nodes) - 1)
 			nodes[colindex].Top += 1
-			nodes[ulink].Dlink = len(nodes) - 1
+			nodes[ulink].Dlink = AppInt(len(nodes) - 1)
 		}
 
 		optionIndex++
 	}
 	nodes = append(nodes, Node{
-		Top:   -len(options),        // negative value to indicate that it is a spacer
-		Ulink: prevOptionFirstIndex, // address of the first node in the option before the spacer
-		Dlink: 0,                    // unused
+		Top:   AppInt(-len(options)), // negative value to indicate that it is a spacer
+		Ulink: prevOptionFirstIndex,  // address of the first node in the option before the spacer
+		Dlink: 0,                     // unused
 	})
 
 	return columns, nodes
