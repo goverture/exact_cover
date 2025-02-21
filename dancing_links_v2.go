@@ -3,6 +3,7 @@ package goverture
 import (
 	"context"
 	"strconv"
+	"time"
 )
 
 // AppInt is the base integer type used throughout the application
@@ -102,15 +103,41 @@ func selectMinColumn(columns []Column, nodes []Node) AppInt {
 }
 
 // Implementation of the Algorithm X ("Exact cover via dancing links") from Knuth's paper
-func SolveExactCover(ctx context.Context, columns []Column, nodes []Node, solution []AppInt, visitSolution func([]AppInt)) error {
+func SolveExactCover(
+	ctx context.Context,
+	columns []Column,
+	nodes []Node,
+	solution []AppInt,
+	solutions chan<- []int,
+	ticker <-chan time.Time,
+) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
+	case <-ticker:
+		if len(solution) > 0 {
+			optionIndex := make([]int, len(solution))
+			for i, x := range solution {
+				for nodes[x].Top > 0 {
+					x = x - 1
+				}
+				optionIndex[i] = -int(nodes[x].Top)
+			}
+			solutions <- optionIndex
+		}
 	default:
 	}
 
 	if columns[0].Rlink == 0 {
-		visitSolution(solution)
+		optionIndex := make([]int, len(solution))
+		for i, x := range solution {
+			for nodes[x].Top > 0 {
+				x = x - 1
+			}
+			optionIndex[i] = -int(nodes[x].Top)
+		}
+		solutions <- optionIndex
+
 		return nil
 	}
 
@@ -136,7 +163,7 @@ func SolveExactCover(ctx context.Context, columns []Column, nodes []Node, soluti
 		}
 
 		solution = append(solution, x)
-		SolveExactCover(ctx, columns, nodes, solution, visitSolution)
+		SolveExactCover(ctx, columns, nodes, solution, solutions, ticker)
 		solution = solution[:len(solution)-1]
 
 		// X6
