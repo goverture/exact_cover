@@ -13,9 +13,9 @@ import (
 // Type definitions for SparseRow, SparseMatrix, and Solution
 type SparseRow map[int]int
 type WordOption struct {
-	Row SparseRow
-	Word string
-	IsThematic bool
+	Row              SparseRow
+	Word             string
+	IsThematic       bool
 	ThematicColIndex int
 }
 type SparseMatrix []SparseRow
@@ -191,7 +191,7 @@ LinkColumns:
 		prevCol = col
 
 		// Also link into the primary columns list if needed
-		if (col.IsPrimary) {
+		if col.IsPrimary {
 			// Insert into the primary columns circular list to the right of `root`
 			col.PrimaryLeft = root
 			col.PrimaryRight = root.PrimaryRight
@@ -283,21 +283,21 @@ func chooseColumn(root *column, useThematic bool, idx int) []*column {
 
 	// Prioritize the thematic words:
 	if useThematic && root.L != nil {
-        thematicColumns := []*column{}
-        for c := root.L.C; c.Index >= thematicIndex; c = c.L.C {
-            if !c.IsPrimary && c.S != 0 { // last words for the last slots
-                thematicColumns = append(thematicColumns, c)
-            }
-        }
+		thematicColumns := []*column{}
+		for c := root.L.C; c.Index >= thematicIndex; c = c.L.C {
+			if !c.IsPrimary && c.S != 0 { // last words for the last slots
+				thematicColumns = append(thematicColumns, c)
+			}
+		}
 
 		rand.Shuffle(len(thematicColumns), func(i, j int) {
 			thematicColumns[i], thematicColumns[j] = thematicColumns[j], thematicColumns[i]
 		})
 
 		return thematicColumns
-    }
+	}
 
-	 // randomly chose
+	// randomly chose
 	return chosen
 }
 
@@ -324,6 +324,7 @@ func noPrimaryColumnsLeft(root *column) bool {
 type NodeVisitor func(depth int)
 
 var thematicWordCount int
+
 // search recursively finds all exact covers, with context for cancellation
 // Sends solutions to a single channel with a flag indicating if it's final.
 func search(
@@ -375,7 +376,6 @@ func search(
 	}
 
 	// Choose the primary column with the smallest size (heuristic)
-	
 
 	// Safely append the first 4 elements of colsThematic and the first element of otherCols
 	colsToChek := make([]*column, 0)
@@ -410,7 +410,7 @@ func search(
 
 		// Iterate through each row in the column
 		for i := col.D; i != &col.node; i = i.D { // So ideally we want to start with the row that is thematic, how to do that ?
-			if(!col.IsPrimary) { 
+			if !col.IsPrimary {
 				thematicWordCount += 1
 			}
 
@@ -446,9 +446,9 @@ func search(
 			default:
 			}
 
-			if(!col.IsPrimary) {
+			if !col.IsPrimary {
 				thematicWordCount -= 1
-				break; // We only cared about the first row
+				break // We only cared about the first row
 			}
 		}
 
@@ -593,7 +593,7 @@ func SolveDLXWithChannel(ctx context.Context, matrixChan <-chan WordOption, tick
 				log.Printf("Search encountered an error: %v\n", err)
 			}
 		} else {
-// Helper function to get the minimum of two integers
+			// Helper function to get the minimum of two integers
 			fmt.Printf("Total nodes visited: %d\n", *totalNodes)
 		}
 	}()

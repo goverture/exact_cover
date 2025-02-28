@@ -5,6 +5,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"runtime/pprof"
 	"time"
@@ -50,9 +51,9 @@ func reconstructBoard(N int, solution []int, choices [][]int, choiceToCell []Cho
 	return board, nil
 }
 
-func generateChoices(testN int) ([][]int, map[int]bool) {
+func generateChoices(testN int) (int, <-chan goverture.SparseRow, map[int]bool) {
 	// Generate the exact cover matrix and choiceToCell mapping for NTest
-	choices := make([][]int, 0)
+	choices := make(chan goverture.SparseRow, 50)
 
 	// Total constraints:
 	// Rows: 0 to NTest-1
@@ -66,36 +67,48 @@ func generateChoices(testN int) ([][]int, map[int]bool) {
 		secondaryColumns[i] = i >= 2*testN
 	}
 
-	for row := 0; row < testN; row++ {
-		for col := 0; col < testN; col++ {
-			choice := make([]int, totalConstraints) // Initialize all to 0
+	go func() {
+		defer close(choices)
 
-			// Row constraint
-			choice[row] = 1
+		for row := 0; row < testN; row++ {
 
-			// Column constraint
-			choice[testN+col] = 1
+			for col := 0; col < testN; col++ {
+				choice := make(goverture.SparseRow, 4)
 
-			// Major Diagonal constraint
-			majorDiag := 2*testN + (row - col + testN - 1)
-			choice[majorDiag] = 1
+				// Row constraint
+				choice[row] = 1
 
-			// Minor Diagonal constraint
-			minorDiag := 4*testN - 1 + (row + col)
-			choice[minorDiag] = 1
+				// Column constraint
+				choice[testN+col] = 1
 
-			choices = append(choices, choice)
+				// Major Diagonal constraint
+				majorDiag := 2*testN + (row - col + testN - 1)
+				choice[majorDiag] = 1
+
+				// Minor Diagonal constraint
+				minorDiag := 4*testN - 1 + (row + col)
+				choice[minorDiag] = 1
+
+				choices <- choice
+			}
 		}
-	}
+	}()
 
-	return choices, secondaryColumns
+	return totalConstraints, choices, secondaryColumns
 }
 
 // go build -ldflags="-s -w" -o queens
 func main() {
-	f, _ := os.Create("cpu.prof")
-	pprof.StartCPUProfile(f)
-	defer pprof.StopCPUProfile()
+	// profile
+	if os.Getenv("ENABLE_CPU_PROFILING") == "true" {
+		f, err := os.Create("cpu.prof")
+		if err != nil {
+			log.Println("Failed to create CPU profile:", err)
+			return
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
 
 	// Define a flag to read the size of the chessboard from command line arguments
 	size := flag.Int("size", 8, "Size of the chessboard (N x N)")
@@ -104,9 +117,7 @@ func main() {
 	fmt.Printf("Solving the %d-Queens Problem:\n", *size)
 
 	// Generate the exact cover matrix and choiceToCell mapping
-	choices, secondaryColumns := generateChoices(*size)
-
-	sparseMatrix := goverture.SparseMatrixFromArray(choices)
+	columnCount, choices, secondaryColumns := generateChoices(*size)
 
 	// Start timer
 	start := time.Now()
@@ -117,14 +128,14 @@ func main() {
 		return exists && ok
 	}
 
-	solutionsChan := goverture.SolveDLXWithSecondary(context.Background(), sparseMatrix, isSecondaryColumn, -1*time.Second)
+	columns, nodes := goverture.BuildDLX(columnCount, choices, isSecondaryColumn)
 
-	// Collect all solutions into a slice
 	solCount := 0
-	for sol := range solutionsChan {
-		_ = sol
+	visitor := func(solution []goverture.AppInt) {
 		solCount++
 	}
+
+	goverture.SolveExactCover(context.Background(), columns, nodes, []goverture.AppInt{}, visitor)
 
 	// Stop timer and calculate duration
 	duration := time.Since(start)

@@ -171,27 +171,24 @@ func TestNQueensSolver_ComplexityEstimate(t *testing.T) {
 	t.Skip("Skipping cancellation test, should be a range")
 
 	// Define a slice of test cases
-	testCases := []struct {
-		N                  int
-		ExpectedComplexity float64
-	}{
-		{N: 4, ExpectedComplexity: 6},
-		{N: 14, ExpectedComplexity: 2332361},
-		{N: 20, ExpectedComplexity: 182540060494},
-	}
+	// testCases := []struct {
+	// 	N                  int
+	// 	ExpectedComplexity float64
+	// }{
+	// 	{N: 4, ExpectedComplexity: 6},
+	// 	{N: 14, ExpectedComplexity: 2332361},
+	// 	{N: 20, ExpectedComplexity: 182540060494},
+	// }
 
-	for _, tc := range testCases {
-		// Generate the exact cover matrix and choiceToCell mapping for the current N
-		choices, secondaryColumns := generateChoices(tc.N)
+	// for _, tc := range testCases {
+	// 	// Generate the exact cover matrix and choiceToCell mapping for the current N
+	// 	choices, secondaryColumns := generateChoices(tc.N)
 
-		// Estimate the complexity of the DLX algorithm
-		estimatedComplexity := goverture.EstimateDLXWithSecondary(choices, secondaryColumns, 1000)
-
-		// Check if the estimated complexity matches the expected value
-		if estimatedComplexity != tc.ExpectedComplexity {
-			t.Errorf("For N=%d, expected complexity %.0f, got %.0f", tc.N, tc.ExpectedComplexity, estimatedComplexity)
-		}
-	}
+	// 	// Check if the estimated complexity matches the expected value
+	// 	if estimatedComplexity != tc.ExpectedComplexity {
+	// 		t.Errorf("For N=%d, expected complexity %.0f, got %.0f", tc.N, tc.ExpectedComplexity, estimatedComplexity)
+	// 	}
+	// }
 }
 
 func TestCancellation(t *testing.T) {

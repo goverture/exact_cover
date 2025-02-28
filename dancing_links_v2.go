@@ -1,0 +1,288 @@
+package goverture
+
+import (
+	"context"
+	"strconv"
+	"time"
+)
+
+// AppInt is the base integer type used throughout the application
+type AppInt int32
+
+type Node struct {
+	Top   AppInt
+	Ulink AppInt
+	Dlink AppInt
+}
+
+type Column struct {
+	Name  string
+	Llink AppInt
+	Rlink AppInt
+}
+
+// Hide an option
+func hide(p AppInt, nodes []Node) {
+	q := p + 1
+	for q != p {
+		x := nodes[q].Top
+		u := nodes[q].Ulink
+		d := nodes[q].Dlink
+		if x <= 0 {
+			q = u // q was a spacer
+		} else {
+			nodes[u].Dlink = d
+			nodes[d].Ulink = u
+			nodes[x].Top -= 1
+			q = q + 1
+		}
+	}
+}
+
+// Unhide an option
+func unhide(p AppInt, nodes []Node) {
+	q := p - 1
+	for q != p {
+		x := nodes[q].Top
+		u := nodes[q].Ulink
+		d := nodes[q].Dlink
+		if x <= 0 {
+			q = d // q was a spacer
+		} else {
+			nodes[u].Dlink = q
+			nodes[d].Ulink = q
+			nodes[x].Top += 1
+			q = q - 1
+		}
+	}
+}
+
+// Cover an item
+func cover(i AppInt, columns []Column, nodes []Node) {
+	p := nodes[i].Dlink
+	for p != i {
+		hide(p, nodes)
+		p = nodes[p].Dlink
+	}
+
+	l := columns[i].Llink
+	r := columns[i].Rlink
+	columns[l].Rlink = r
+	columns[r].Llink = l
+}
+
+// Uncover an item
+func uncover(i AppInt, columns []Column, nodes []Node) {
+	l := columns[i].Llink
+	r := columns[i].Rlink
+	columns[l].Rlink = i
+	columns[r].Llink = i
+
+	p := nodes[i].Ulink
+	for p != i {
+		unhide(p, nodes)
+		p = nodes[p].Ulink
+	}
+}
+
+// selectMinColumn finds the column (header) with the smallest node count.
+func selectMinColumn(columns []Column, nodes []Node) AppInt {
+	best := columns[0].Rlink
+	minCount := nodes[best].Top
+	for j := columns[best].Rlink; j != 0; j = columns[j].Rlink {
+		if nodes[j].Top < minCount {
+			best = j
+			minCount = nodes[j].Top
+		}
+
+		if minCount == 0 {
+			return best
+		}
+	}
+	return best
+}
+
+// Implementation of the Algorithm X ("Exact cover via dancing links") from Knuth's paper
+func SolveExactCover(
+	ctx context.Context,
+	columns []Column,
+	nodes []Node,
+	solution []AppInt,
+	solutions chan<- []int,
+	ticker <-chan time.Time,
+) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-ticker:
+		if len(solution) > 0 {
+			solutionCopy := make([]AppInt, len(solution))
+			copy(solutionCopy, solution) 
+	
+			go func() {
+				optionIndex := make([]int, len(solutionCopy))
+				for i, x := range solutionCopy {
+					for nodes[x].Top > 0 {
+						x = x - 1
+					}
+					optionIndex[i] = -int(nodes[x].Top)
+				}
+				solutions <- optionIndex
+			}()
+		}
+	default:
+	}
+
+	if columns[0].Rlink == 0 {
+		solutionCopy := make([]AppInt, len(solution))
+		copy(solutionCopy, solution) 
+		go func() {
+			optionIndex := make([]int, len(solutionCopy))
+			for i, x := range solutionCopy {
+				for nodes[x].Top > 0 {
+					x = x - 1
+				}
+				optionIndex[i] = -int(nodes[x].Top)
+			}
+			solutions <- optionIndex
+		}()
+
+		return nil
+	}
+
+	i := selectMinColumn(columns, nodes)
+	if nodes[i].Top == 0 {
+		// No solutions
+		return nil
+	}
+
+	cover(i, columns, nodes)
+	x := nodes[i].Dlink
+
+	for x != i {
+		p := x + 1
+		for p != x {
+			j := nodes[p].Top
+			if j <= 0 {
+				p = nodes[p].Ulink
+			} else {
+				cover(j, columns, nodes)
+				p = p + 1
+			}
+		}
+
+		solution = append(solution, x)
+		if err := SolveExactCover(ctx, columns, nodes, solution, solutions, ticker); err != nil {
+			return err
+		}
+		solution = solution[:len(solution)-1]
+
+		// X6
+		p = x - 1
+		for p != x {
+			j := nodes[p].Top
+			if j <= 0 {
+				p = nodes[p].Dlink
+			} else {
+				uncover(j, columns, nodes)
+				p = p - 1
+			}
+		}
+
+		x = nodes[x].Dlink
+	}
+
+	// X7
+	uncover(i, columns, nodes)
+
+	return nil
+}
+
+func BuildDLX(itemsCount int, options <-chan SparseRow, isSecondaryColumn func(int) bool) ([]Column, []Node) {
+	if itemsCount == 0 {
+		return []Column{}, []Node{}
+	}
+
+	columns := make([]Column, 1+itemsCount) // +1 for root
+	nodes := make([]Node, 1+itemsCount)     // +1 for root
+
+	// Build the columns (horizontally linked)
+	columns[0] = Column{
+		Name:  "root",
+		Llink: 0,
+		Rlink: 0,
+	}
+	nodes[0] = Node{
+		Top:   0,
+		Ulink: 0,
+		Dlink: 0,
+	}
+
+	previousPrimaryColumnIndex := AppInt(0)
+	for i := 1; i < len(columns); i++ {
+		name := "C" + strconv.Itoa(i)
+
+		columns[i] = Column{
+			Name:  name,
+			Llink: AppInt(i),
+			Rlink: AppInt(i), // Secondary columns are not linked
+		}
+		// We don't link secondary columns
+		if !isSecondaryColumn(i - 1) {
+			columns[i].Llink = previousPrimaryColumnIndex
+			columns[previousPrimaryColumnIndex].Rlink = AppInt(i)
+
+			previousPrimaryColumnIndex = AppInt(i)
+			columns[i].Rlink = 0 // point to root
+		}
+
+		nodes[i] = Node{
+			Top:   0,
+			Ulink: AppInt(i), // point to itself
+			Dlink: AppInt(i), // point to itself
+		}
+	}
+	columns[0].Llink = previousPrimaryColumnIndex
+
+	var prevOptionFirstIndex AppInt
+	optionIndex := 0
+	for option := range options {
+		itemsCount := len(option)
+		elementCount := len(nodes)
+
+		// Insert a Spacer node
+		nodes = append(nodes, Node{
+			Top:   AppInt(-optionIndex),              // negative value to indicate that it is a spacer
+			Ulink: prevOptionFirstIndex,              // address of the first node in the option before the spacer
+			Dlink: AppInt(elementCount + itemsCount), // address of the last node in the option after the spacer
+		})
+
+		prevOptionFirstIndex = AppInt(len(nodes))
+
+		for i := range option {
+			colindex := AppInt(i + 1) // account for the root node at 0
+			ulink := nodes[colindex].Ulink
+
+			node := Node{
+				Top:   colindex,
+				Ulink: ulink,
+				Dlink: colindex,
+			}
+
+			nodes = append(nodes, node)
+
+			nodes[colindex].Ulink = AppInt(len(nodes) - 1)
+			nodes[colindex].Top += 1
+			nodes[ulink].Dlink = AppInt(len(nodes) - 1)
+		}
+
+		optionIndex++
+	}
+	nodes = append(nodes, Node{
+		Top:   AppInt(-len(options)), // negative value to indicate that it is a spacer
+		Ulink: prevOptionFirstIndex,  // address of the first node in the option before the spacer
+		Dlink: 0,                     // unused
+	})
+
+	return columns, nodes
+}
