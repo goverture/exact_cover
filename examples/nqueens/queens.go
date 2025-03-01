@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"runtime/pprof"
+	"sync/atomic"
 	"time"
 
 	goverture "github.com/goverture/exact_cover"
@@ -130,9 +131,9 @@ func main() {
 
 	columns, nodes := goverture.BuildDLX(columnCount, choices, isSecondaryColumn)
 
-	solCount := 0
+	var solCount atomic.Int32
 	visitor := func(solution []goverture.AppInt) {
-		solCount++
+		solCount.Add(1)
 	}
 
 	state := goverture.SearchState{
@@ -140,10 +141,10 @@ func main() {
 		Nodes:     nodes,
 		Solution:  []goverture.AppInt{},
 		Solutions: make(chan []goverture.AppInt),
-		Ticker:    time.Tick(time.Second),
+		Ticker:    nil,
 	}
 
-	go goverture.SolveExactCover(context.Background(), state)
+	go goverture.SolveExactCoverParallel(context.Background(), state)
 
 	for solution := range state.Solutions {
 		visitor(solution)
@@ -153,5 +154,5 @@ func main() {
 	duration := time.Since(start)
 
 	// Display the number of solutions found
-	fmt.Printf("\nFound %d solution(s) in %v\n", solCount, duration)
+	fmt.Printf("\nFound %d solution(s) in %v\n", solCount.Load(), duration)
 }

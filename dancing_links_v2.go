@@ -2,7 +2,10 @@ package goverture
 
 import (
 	"context"
+	"fmt"
+	"runtime"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -109,6 +112,108 @@ type SearchState struct {
 	Solutions chan []AppInt
 	Ticker    <-chan time.Time
 	Level     int
+}
+
+func CopySearchState(state SearchState) SearchState {
+	// Copy columns
+	columnsCopy := make([]Column, len(state.Columns))
+	copy(columnsCopy, state.Columns)
+
+	// Copy nodes
+	nodesCopy := make([]Node, len(state.Nodes))
+	copy(nodesCopy, state.Nodes)
+
+	// Copy solution
+	solutionCopy := make([]AppInt, len(state.Solution))
+	copy(solutionCopy, state.Solution)
+
+	// Return a new SearchState with copied data
+	return SearchState{
+		Columns:   columnsCopy,
+		Nodes:     nodesCopy,
+		Solution:  solutionCopy,
+		Solutions: state.Solutions,
+		Ticker:    state.Ticker,
+		Level:     state.Level,
+	}
+}
+
+func startWorkerPool(ctx context.Context, wg *sync.WaitGroup, workChan <-chan SearchState, numWorkers int) {                                                                    
+	for range numWorkers {                                                                                                                
+		go func() {                                                                                                                                  
+			for work := range workChan {      
+				fmt.Println("Solving work")                                                                                                       
+				SolveExactCover(ctx, work)
+			}
+			wg.Done()                                                             
+		}()
+	}          
+}
+
+// Implementation of the Algorithm X ("Exact cover via dancing links") from Knuth's paper
+func SolveExactCoverParallel(ctx context.Context, state SearchState) error {
+	wg := sync.WaitGroup{}
+
+	numCpus := runtime.NumCPU()
+	wg.Add(numCpus)
+	workChan := make(chan SearchState, numCpus)
+	if state.Level == 0 {
+		defer close(state.Solutions)
+		startWorkerPool(ctx, &wg, workChan, numCpus)
+	}
+
+	i := selectMinColumn(state.Columns, state.Nodes)
+	if state.Nodes[i].Top == 0 {
+		// No solutions
+		return nil
+	}
+
+	cover(i, state.Columns, state.Nodes)
+	x := state.Nodes[i].Dlink
+
+	for x != i {
+		p := x + 1
+		for p != x {
+			j := state.Nodes[p].Top
+			if j <= 0 {
+				p = state.Nodes[p].Ulink
+			} else {
+				cover(j, state.Columns, state.Nodes)
+				p = p + 1
+			}
+		}
+
+		state.Solution = append(state.Solution, x)
+		state.Level++
+
+		newState := CopySearchState(state)
+		workChan <- newState
+
+		state.Level--
+		state.Solution = state.Solution[:len(state.Solution)-1]
+
+		// X6
+		p = x - 1
+		for p != x {
+			j := state.Nodes[p].Top
+			if j <= 0 {
+				p = state.Nodes[p].Dlink
+			} else {
+				uncover(j, state.Columns, state.Nodes)
+				p = p - 1
+			}
+		}
+
+		x = state.Nodes[x].Dlink
+	}
+
+	close(workChan)
+
+	// X7
+	uncover(i, state.Columns, state.Nodes)
+
+	wg.Wait()
+	return nil
 }
 
 // Implementation of the Algorithm X ("Exact cover via dancing links") from Knuth's paper
