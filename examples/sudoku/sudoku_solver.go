@@ -122,13 +122,6 @@ func main() {
 
 	columns, nodes := goverture.BuildDLX(columnCount, choices, isSecondaryColumn)
 	visitor := func(solution []goverture.AppInt) {
-		optionIndex := make([]int, len(solution))
-		for i, x := range solution {
-			for nodes[x].Top > 0 {
-				x = x - 1
-			}
-			optionIndex[i] = -int(nodes[x].Top)
-		}
 		fmt.Println("Solution found : ")
 
 		// Initialize an empty Sudoku grid
@@ -142,7 +135,7 @@ func main() {
 		}
 
 		// Iterate over each row in the solution
-		for _, i := range optionIndex {
+		for _, i := range solution {
 			// Map the choice index to the corresponding cell and number
 			choice := choiceToCell[i]
 			solvedGrid[choice.Row][choice.Col] = choice.Num
@@ -153,5 +146,19 @@ func main() {
 		fmt.Println("--------")
 	}
 
-	goverture.SolveExactCover(context.Background(), columns, nodes, []goverture.AppInt{}, visitor)
+	state := goverture.SearchState{
+		Columns:   columns,
+		Nodes:     nodes,
+		Solution:  []goverture.AppInt{},
+		Solutions: make(chan []goverture.AppInt),
+		Ticker:    nil,
+	}
+
+	go goverture.SolveExactCover(context.Background(), state)
+
+	for solution := range state.Solutions {
+		visitor(solution)
+	}
+
+	fmt.Println("Done")
 }

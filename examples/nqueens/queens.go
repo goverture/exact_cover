@@ -135,7 +135,19 @@ func main() {
 		solCount++
 	}
 
-	goverture.SolveExactCover(context.Background(), columns, nodes, []goverture.AppInt{}, visitor)
+	state := goverture.SearchState{
+		Columns:   columns,
+		Nodes:     nodes,
+		Solution:  []goverture.AppInt{},
+		Solutions: make(chan []goverture.AppInt),
+		Ticker:    time.Tick(time.Second),
+	}
+
+	go goverture.SolveExactCover(context.Background(), state)
+
+	for solution := range state.Solutions {
+		visitor(solution)
+	}
 
 	// Stop timer and calculate duration
 	duration := time.Since(start)

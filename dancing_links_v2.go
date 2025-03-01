@@ -102,98 +102,102 @@ func selectMinColumn(columns []Column, nodes []Node) AppInt {
 	return best
 }
 
+type SearchState struct {
+	Columns   []Column
+	Nodes     []Node
+	Solution  []AppInt
+	Solutions chan []AppInt
+	Ticker    <-chan time.Time
+	Level     int
+}
+
 // Implementation of the Algorithm X ("Exact cover via dancing links") from Knuth's paper
-func SolveExactCover(
-	ctx context.Context,
-	columns []Column,
-	nodes []Node,
-	solution []AppInt,
-	solutions chan<- []int,
-	ticker <-chan time.Time,
-) error {
+func SolveExactCover(ctx context.Context, state SearchState) error {
+	if state.Level == 0 {
+		defer close(state.Solutions)
+	}
+
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-ticker:
-		if len(solution) > 0 {
-			solutionCopy := make([]AppInt, len(solution))
-			copy(solutionCopy, solution) 
-	
+	case <-state.Ticker:
+		if len(state.Solution) > 0 {
+			solutionCopy := make([]AppInt, len(state.Solution))
+			copy(solutionCopy, state.Solution)
+
 			go func() {
-				optionIndex := make([]int, len(solutionCopy))
+				optionIndex := make([]AppInt, len(solutionCopy))
 				for i, x := range solutionCopy {
-					for nodes[x].Top > 0 {
+					for state.Nodes[x].Top > 0 {
 						x = x - 1
 					}
-					optionIndex[i] = -int(nodes[x].Top)
+					optionIndex[i] = -AppInt(state.Nodes[x].Top)
 				}
-				solutions <- optionIndex
+				state.Solutions <- optionIndex
 			}()
 		}
 	default:
 	}
 
-	if columns[0].Rlink == 0 {
-		solutionCopy := make([]AppInt, len(solution))
-		copy(solutionCopy, solution) 
-		go func() {
-			optionIndex := make([]int, len(solutionCopy))
-			for i, x := range solutionCopy {
-				for nodes[x].Top > 0 {
-					x = x - 1
-				}
-				optionIndex[i] = -int(nodes[x].Top)
+	if state.Columns[0].Rlink == 0 {
+		optionIndex := make([]AppInt, len(state.Solution))
+		for i, x := range state.Solution {
+			for state.Nodes[x].Top > 0 {
+				x = x - 1
 			}
-			solutions <- optionIndex
-		}()
+			optionIndex[i] = -AppInt(state.Nodes[x].Top)
+		}
+		state.Solutions <- optionIndex
 
 		return nil
 	}
 
-	i := selectMinColumn(columns, nodes)
-	if nodes[i].Top == 0 {
+	i := selectMinColumn(state.Columns, state.Nodes)
+	if state.Nodes[i].Top == 0 {
 		// No solutions
 		return nil
 	}
 
-	cover(i, columns, nodes)
-	x := nodes[i].Dlink
+	cover(i, state.Columns, state.Nodes)
+	x := state.Nodes[i].Dlink
 
 	for x != i {
 		p := x + 1
 		for p != x {
-			j := nodes[p].Top
+			j := state.Nodes[p].Top
 			if j <= 0 {
-				p = nodes[p].Ulink
+				p = state.Nodes[p].Ulink
 			} else {
-				cover(j, columns, nodes)
+				cover(j, state.Columns, state.Nodes)
 				p = p + 1
 			}
 		}
 
-		solution = append(solution, x)
-		if err := SolveExactCover(ctx, columns, nodes, solution, solutions, ticker); err != nil {
+		state.Solution = append(state.Solution, x)
+		state.Level++
+		if err := SolveExactCover(ctx, state); err != nil {
 			return err
 		}
-		solution = solution[:len(solution)-1]
+		state.Level--
+		state.Solution = state.Solution[:len(state.Solution)-1]
 
 		// X6
 		p = x - 1
 		for p != x {
-			j := nodes[p].Top
+			j := state.Nodes[p].Top
 			if j <= 0 {
-				p = nodes[p].Dlink
+				p = state.Nodes[p].Dlink
 			} else {
-				uncover(j, columns, nodes)
+				uncover(j, state.Columns, state.Nodes)
 				p = p - 1
 			}
 		}
 
-		x = nodes[x].Dlink
+		x = state.Nodes[x].Dlink
 	}
 
 	// X7
-	uncover(i, columns, nodes)
+	uncover(i, state.Columns, state.Nodes)
 
 	return nil
 }
