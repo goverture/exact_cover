@@ -114,7 +114,7 @@ type SearchState struct {
 	ActiveWorkerChannel chan struct{}
 }
 
-func CopySearchState(state SearchState) SearchState {
+func CopySearchState(state *SearchState) *SearchState {
 	// Copy columns
 	columnsCopy := make([]Column, len(state.Columns))
 	copy(columnsCopy, state.Columns)
@@ -124,17 +124,18 @@ func CopySearchState(state SearchState) SearchState {
 	copy(nodesCopy, state.Nodes)
 
 	// Copy solution
-	solutionCopy := make([]AppInt, len(state.Solution))
+	solutionCopy := make([]AppInt, len(state.Solution) + 1)
 	copy(solutionCopy, state.Solution)
 
 	// Return a new SearchState with copied data
-	return SearchState{
-		Columns:   columnsCopy,
-		Nodes:     nodesCopy,
-		Solution:  solutionCopy,
-		Solutions: state.Solutions,
-		Ticker:    state.Ticker,
-		Level:     state.Level,
+	return &SearchState{
+		Columns:             columnsCopy,
+		Nodes:               nodesCopy,
+		Solution:            solutionCopy,
+		Solutions:           state.Solutions,
+		Ticker:              state.Ticker,
+		Level:               state.Level,
+		ActiveWorkerChannel: state.ActiveWorkerChannel,
 	}
 }
 
@@ -165,7 +166,7 @@ func uncoverOption(x AppInt, state *SearchState) {
 }
 
 // Implementation of the Algorithm X ("Exact cover via dancing links") from Knuth's paper
-func SolveExactCoverParallel(ctx context.Context, state SearchState) error {
+func SolveExactCoverParallel(ctx context.Context, state *SearchState) error {
 	if state.Level == 0 {
 		defer close(state.Solutions)
 
@@ -217,32 +218,57 @@ func SolveExactCoverParallel(ctx context.Context, state SearchState) error {
 	x := state.Nodes[i].Dlink
 	
 	for x != i {
-		coverOption(x, &state)
+		if state.Level <= 5 {
+			select {
+			case state.ActiveWorkerChannel <- struct{}{}:
+				go func(x AppInt, newState *SearchState) {
+					//fmt.Println("New worker started")
+					coverOption(x, newState)
 
-		state.Solution = append(state.Solution, x)
-		state.Level++
+					newState.Solution = append(state.Solution, x)
+					newState.Level++
+					
+					//fmt.Println("Starting new worker")
+					SolveExactCoverParallel(ctx, newState)
+					<-newState.ActiveWorkerChannel
+					
+					
+					//fmt.Println("Worker done")
 
-		select {
-		case state.ActiveWorkerChannel <- struct{}{}:
-			newState := CopySearchState(state)
-			go func() {
-				//fmt.Println("Starting new worker")
-				SolveExactCoverParallel(ctx, newState)
-				<-state.ActiveWorkerChannel
-				//fmt.Println("Worker done")
-			}()
-		default:
+					
+				}(x, CopySearchState(state))
+			default:
+				coverOption(x, state)
+
+				state.Solution = append(state.Solution, x)
+				state.Level++
+
+				if err := SolveExactCoverParallel(ctx, state); err != nil {
+					return err
+				}
+		
+				state.Level--
+				state.Solution = state.Solution[:len(state.Solution)-1]
+
+				// X6
+				uncoverOption(x, state)
+			}
+		} else {
+			coverOption(x, state)
+
+			state.Solution = append(state.Solution, x)
+			state.Level++
+
 			if err := SolveExactCoverParallel(ctx, state); err != nil {
 				return err
 			}
-		}
-
 	
-		state.Level--
-		state.Solution = state.Solution[:len(state.Solution)-1]
+			state.Level--
+			state.Solution = state.Solution[:len(state.Solution)-1]
 
-		// X6
-		uncoverOption(x, &state)
+			// X6
+			uncoverOption(x, state)
+		}
 
 		x = state.Nodes[x].Dlink
 	}

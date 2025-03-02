@@ -145,7 +145,7 @@ func main() {
 		Ticker:    nil,
 	}
 
-	go goverture.SolveExactCoverParallel(context.Background(), state)
+	go goverture.SolveExactCoverParallel(context.Background(), &state)
 
 	for solution := range state.Solutions {
 		visitor(solution)
