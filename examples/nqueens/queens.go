@@ -134,6 +134,7 @@ func main() {
 	var solCount atomic.Int32
 	visitor := func(solution []goverture.AppInt) {
 		solCount.Add(1)
+		// fmt.Println("Solution #", solCount.Load())
 	}
 
 	state := goverture.SearchState{

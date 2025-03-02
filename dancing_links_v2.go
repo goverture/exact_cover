@@ -2,10 +2,7 @@ package goverture
 
 import (
 	"context"
-	"fmt"
-	"runtime"
 	"strconv"
-	"sync"
 	"time"
 )
 
@@ -112,6 +109,9 @@ type SearchState struct {
 	Solutions chan []AppInt
 	Ticker    <-chan time.Time
 	Level     int
+
+	// Internal worker management
+	ActiveWorkerChannel chan struct{}
 }
 
 func CopySearchState(state SearchState) SearchState {
@@ -138,88 +138,38 @@ func CopySearchState(state SearchState) SearchState {
 	}
 }
 
-func startWorkerPool(ctx context.Context, wg *sync.WaitGroup, workChan <-chan SearchState, numWorkers int) {                                                                    
-	for range numWorkers {                                                                                                                
-		go func() {                                                                                                                                  
-			for work := range workChan {      
-				fmt.Println("Solving work")                                                                                                       
-				SolveExactCover(ctx, work)
-			}
-			wg.Done()                                                             
-		}()
-	}          
+func coverOption(x AppInt, state *SearchState) {
+	p := x + 1
+	for p != x {
+		j := state.Nodes[p].Top
+		if j <= 0 {
+			p = state.Nodes[p].Ulink
+		} else {
+			cover(j, state.Columns, state.Nodes)
+			p = p + 1
+		}
+	}
+}
+
+func uncoverOption(x AppInt, state *SearchState) {
+	p := x - 1
+	for p != x {
+		j := state.Nodes[p].Top
+		if j <= 0 {
+			p = state.Nodes[p].Dlink
+		} else {
+			uncover(j, state.Columns, state.Nodes)
+			p = p - 1
+		}
+	}
 }
 
 // Implementation of the Algorithm X ("Exact cover via dancing links") from Knuth's paper
 func SolveExactCoverParallel(ctx context.Context, state SearchState) error {
-	wg := sync.WaitGroup{}
-
-	numCpus := runtime.NumCPU()
-	wg.Add(numCpus)
-	workChan := make(chan SearchState, numCpus)
 	if state.Level == 0 {
 		defer close(state.Solutions)
-		startWorkerPool(ctx, &wg, workChan, numCpus)
-	}
 
-	i := selectMinColumn(state.Columns, state.Nodes)
-	if state.Nodes[i].Top == 0 {
-		// No solutions
-		return nil
-	}
-
-	cover(i, state.Columns, state.Nodes)
-	x := state.Nodes[i].Dlink
-
-	for x != i {
-		p := x + 1
-		for p != x {
-			j := state.Nodes[p].Top
-			if j <= 0 {
-				p = state.Nodes[p].Ulink
-			} else {
-				cover(j, state.Columns, state.Nodes)
-				p = p + 1
-			}
-		}
-
-		state.Solution = append(state.Solution, x)
-		state.Level++
-
-		newState := CopySearchState(state)
-		workChan <- newState
-
-		state.Level--
-		state.Solution = state.Solution[:len(state.Solution)-1]
-
-		// X6
-		p = x - 1
-		for p != x {
-			j := state.Nodes[p].Top
-			if j <= 0 {
-				p = state.Nodes[p].Dlink
-			} else {
-				uncover(j, state.Columns, state.Nodes)
-				p = p - 1
-			}
-		}
-
-		x = state.Nodes[x].Dlink
-	}
-
-	close(workChan)
-
-	// X7
-	uncover(i, state.Columns, state.Nodes)
-
-	wg.Wait()
-	return nil
-}
-
-// Implementation of the Algorithm X ("Exact cover via dancing links") from Knuth's paper
-func SolveExactCover(ctx context.Context, state SearchState) error {
-	if state.Level == 0 {
-		defer close(state.Solutions)
+		state.ActiveWorkerChannel = make(chan struct{}, 12)
 	}
 
 	select {
@@ -265,38 +215,34 @@ func SolveExactCover(ctx context.Context, state SearchState) error {
 
 	cover(i, state.Columns, state.Nodes)
 	x := state.Nodes[i].Dlink
-
+	
 	for x != i {
-		p := x + 1
-		for p != x {
-			j := state.Nodes[p].Top
-			if j <= 0 {
-				p = state.Nodes[p].Ulink
-			} else {
-				cover(j, state.Columns, state.Nodes)
-				p = p + 1
-			}
-		}
+		coverOption(x, &state)
 
 		state.Solution = append(state.Solution, x)
 		state.Level++
-		if err := SolveExactCover(ctx, state); err != nil {
-			return err
+
+		select {
+		case state.ActiveWorkerChannel <- struct{}{}:
+			newState := CopySearchState(state)
+			go func() {
+				//fmt.Println("Starting new worker")
+				SolveExactCoverParallel(ctx, newState)
+				<-state.ActiveWorkerChannel
+				//fmt.Println("Worker done")
+			}()
+		default:
+			if err := SolveExactCoverParallel(ctx, state); err != nil {
+				return err
+			}
 		}
+
+	
 		state.Level--
 		state.Solution = state.Solution[:len(state.Solution)-1]
 
 		// X6
-		p = x - 1
-		for p != x {
-			j := state.Nodes[p].Top
-			if j <= 0 {
-				p = state.Nodes[p].Dlink
-			} else {
-				uncover(j, state.Columns, state.Nodes)
-				p = p - 1
-			}
-		}
+		uncoverOption(x, &state)
 
 		x = state.Nodes[x].Dlink
 	}
@@ -304,6 +250,15 @@ func SolveExactCover(ctx context.Context, state SearchState) error {
 	// X7
 	uncover(i, state.Columns, state.Nodes)
 
+	if state.Level == 0 {
+		// Wait until all workers are done
+		for {
+			if len(state.ActiveWorkerChannel) == 0 {
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
 	return nil
 }
 
