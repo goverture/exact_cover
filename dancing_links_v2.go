@@ -2,6 +2,7 @@ package goverture
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"time"
 )
@@ -168,8 +169,6 @@ func uncoverOption(x AppInt, state *SearchState) {
 // Implementation of the Algorithm X ("Exact cover via dancing links") from Knuth's paper
 func SolveExactCoverParallel(ctx context.Context, state *SearchState) error {
 	if state.Level == 0 {
-		defer close(state.Solutions)
-
 		state.ActiveWorkerChannel = make(chan struct{}, 12)
 	}
 
@@ -181,7 +180,12 @@ func SolveExactCoverParallel(ctx context.Context, state *SearchState) error {
 			solutionCopy := make([]AppInt, len(state.Solution))
 			copy(solutionCopy, state.Solution)
 
-			go func() {
+			go func(ctx context.Context) {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
 				optionIndex := make([]AppInt, len(solutionCopy))
 				for i, x := range solutionCopy {
 					for state.Nodes[x].Top > 0 {
@@ -190,12 +194,13 @@ func SolveExactCoverParallel(ctx context.Context, state *SearchState) error {
 					optionIndex[i] = -AppInt(state.Nodes[x].Top)
 				}
 				state.Solutions <- optionIndex
-			}()
+			}(ctx)
 		}
 	default:
 	}
 
 	if state.Columns[0].Rlink == 0 {
+		fmt.Println("found a solution for real !")
 		optionIndex := make([]AppInt, len(state.Solution))
 		for i, x := range state.Solution {
 			for state.Nodes[x].Top > 0 {
@@ -216,27 +221,35 @@ func SolveExactCoverParallel(ctx context.Context, state *SearchState) error {
 
 	cover(i, state.Columns, state.Nodes)
 	x := state.Nodes[i].Dlink
-	
+
 	for x != i {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
 		if state.Level <= 5 {
 			select {
 			case state.ActiveWorkerChannel <- struct{}{}:
-				go func(x AppInt, newState *SearchState) {
+				go func(ctx context.Context, x AppInt, newState *SearchState) {
+					select {
+					case <-ctx.Done():
+						return
+					default:
+					}
 					//fmt.Println("New worker started")
 					coverOption(x, newState)
 
-					newState.Solution = append(state.Solution, x)
+					newState.Solution = append(newState.Solution, x)
 					newState.Level++
-					
+
 					//fmt.Println("Starting new worker")
 					SolveExactCoverParallel(ctx, newState)
 					<-newState.ActiveWorkerChannel
-					
-					
-					//fmt.Println("Worker done")
 
-					
-				}(x, CopySearchState(state))
+					//fmt.Println("Worker done")					
+				}(ctx, x, CopySearchState(state))
 			default:
 				coverOption(x, state)
 
