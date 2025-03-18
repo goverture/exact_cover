@@ -125,7 +125,7 @@ func CopySearchState(state *SearchState) *SearchState {
 	copy(nodesCopy, state.Nodes)
 
 	// Copy solution
-	solutionCopy := make([]AppInt, len(state.Solution) + 1)
+	solutionCopy := make([]AppInt, len(state.Solution)+1)
 	copy(solutionCopy, state.Solution)
 
 	// Return a new SearchState with copied data
@@ -169,7 +169,7 @@ func uncoverOption(x AppInt, state *SearchState) {
 // Implementation of the Algorithm X ("Exact cover via dancing links") from Knuth's paper
 func SolveExactCoverParallel(ctx context.Context, state *SearchState) error {
 	if state.Level == 0 {
-		state.ActiveWorkerChannel = make(chan struct{}, 12)
+		state.ActiveWorkerChannel = make(chan struct{}, 4)
 	}
 
 	select {
@@ -222,10 +222,11 @@ func SolveExactCoverParallel(ctx context.Context, state *SearchState) error {
 	cover(i, state.Columns, state.Nodes)
 	x := state.Nodes[i].Dlink
 
+outerLoop:
 	for x != i {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			break outerLoop
 		default:
 		}
 
@@ -233,6 +234,8 @@ func SolveExactCoverParallel(ctx context.Context, state *SearchState) error {
 			select {
 			case state.ActiveWorkerChannel <- struct{}{}:
 				go func(ctx context.Context, x AppInt, newState *SearchState) {
+					defer func() { <-newState.ActiveWorkerChannel }()
+
 					select {
 					case <-ctx.Done():
 						return
@@ -246,9 +249,10 @@ func SolveExactCoverParallel(ctx context.Context, state *SearchState) error {
 
 					//fmt.Println("Starting new worker")
 					SolveExactCoverParallel(ctx, newState)
-					<-newState.ActiveWorkerChannel
 
-					//fmt.Println("Worker done")					
+					fmt.Println("Popping from active worker channel")
+
+					fmt.Println("Worker done")
 				}(ctx, x, CopySearchState(state))
 			default:
 				coverOption(x, state)
@@ -259,7 +263,7 @@ func SolveExactCoverParallel(ctx context.Context, state *SearchState) error {
 				if err := SolveExactCoverParallel(ctx, state); err != nil {
 					return err
 				}
-		
+
 				state.Level--
 				state.Solution = state.Solution[:len(state.Solution)-1]
 
@@ -273,9 +277,9 @@ func SolveExactCoverParallel(ctx context.Context, state *SearchState) error {
 			state.Level++
 
 			if err := SolveExactCoverParallel(ctx, state); err != nil {
-				return err
+				// return err
 			}
-	
+
 			state.Level--
 			state.Solution = state.Solution[:len(state.Solution)-1]
 
