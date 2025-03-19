@@ -2,7 +2,6 @@ package goverture
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"time"
 )
@@ -202,7 +201,7 @@ func SolveExactCoverParallel(ctx context.Context, state *SearchState) error {
 	}
 
 	if state.Columns[0].Rlink == 0 {
-		fmt.Println("found a solution for real !")
+		//fmt.Println("found a solution for real !")
 		optionIndex := make([]AppInt, len(state.Solution))
 		for i, x := range state.Solution {
 			for state.Nodes[x].Top > 0 {
@@ -252,9 +251,9 @@ outerLoop:
 					//fmt.Println("Starting new worker")
 					SolveExactCoverParallel(ctx, newState)
 
-					fmt.Println("Popping from active worker channel")
+					//fmt.Println("Popping from active worker channel")
 
-					fmt.Println("Worker done")
+					//fmt.Println("Worker done")
 				}(ctx, x, CopySearchState(state))
 			default:
 				coverOption(x, state)
