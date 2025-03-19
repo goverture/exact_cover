@@ -113,6 +113,7 @@ type SearchState struct {
 
 	// Internal worker management
 	ActiveWorkerChannel chan struct{}
+	MaxWorkers          int
 }
 
 func CopySearchState(state *SearchState) *SearchState {
@@ -124,7 +125,7 @@ func CopySearchState(state *SearchState) *SearchState {
 	nodesCopy := make([]Node, len(state.Nodes))
 	copy(nodesCopy, state.Nodes)
 
-	// Copy solution
+	// Copy solution (+ room for the next item)
 	solutionCopy := make([]AppInt, len(state.Solution)+1)
 	copy(solutionCopy, state.Solution)
 
@@ -137,6 +138,7 @@ func CopySearchState(state *SearchState) *SearchState {
 		Ticker:              state.Ticker,
 		Level:               state.Level,
 		ActiveWorkerChannel: state.ActiveWorkerChannel,
+		MaxWorkers:          state.MaxWorkers,
 	}
 }
 
@@ -169,7 +171,7 @@ func uncoverOption(x AppInt, state *SearchState) {
 // Implementation of the Algorithm X ("Exact cover via dancing links") from Knuth's paper
 func SolveExactCoverParallel(ctx context.Context, state *SearchState) error {
 	if state.Level == 0 {
-		state.ActiveWorkerChannel = make(chan struct{}, 4)
+		state.ActiveWorkerChannel = make(chan struct{}, state.MaxWorkers)
 	}
 
 	select {
